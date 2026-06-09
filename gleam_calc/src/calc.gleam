@@ -38,7 +38,8 @@ fn lex(expr: String) -> List(String) {
       <> "("
       // parens, operations OR
       <> "[()\\+\\-*/]|"
-      // not whitespace or symbols
+      // not whitespace or parens or operations
+      // (so numbers or funcions)
       <> "[^\\s()\\+\\-*/]"
       <> ")",
     )
