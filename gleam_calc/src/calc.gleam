@@ -1,20 +1,21 @@
-import gleam/int
 import gleam/bool
 import gleam/float
+import gleam/int
 import gleam/io
 import gleam/list
+import gleam/regexp
 import gleam/result
 import gleam/string
 import input.{input}
 
-type Token {
-  Number(value: Float)
-  PlusSign
-  MinusSign
-  LeftParen
-  RightParen
-  UnknownToken(str: String)
-}
+// type Token {
+//   Number(value: Float)
+//   PlusSign
+//   MinusSign
+//   LeftParen
+//   RightParen
+//   UnknownToken(str: String)
+// }
 
 type ASTNode {
   ASTNode
@@ -28,28 +29,27 @@ pub fn main() -> Nil {
   io.println("bye")
 }
 
-fn lex(expr: String) -> List(Token) {
-  lex_tco(expr, [])
+fn lex(expr: String) -> List(String) {
+  let assert Ok(regex) =
+    regexp.from_string(
+      // ignore whitespace
+      "\\s*"
+      // match:
+      <> "("
+      // parens, operations OR
+      <> "[()\\+\\-*/]|"
+      // not whitespace or symbols
+      <> "[^\\s()\\+\\-*/]"
+      <> ")",
+    )
+  let matches = regexp.scan(regex, expr)
+  list.map(matches, fn(match) {
+    let regexp.Match(str, _) = match
+    str
+  })
 }
 
-fn lex_tco(expr: String, acc: List(Token)) -> List(Token) {
-  use <- bool.guard(string.is_empty(expr), list.reverse(acc))
-  let #(token, rest) = case expr {
-    "(" <> rest -> #(LeftParen, rest)
-    ")" <> rest -> #(RightParen, rest)
-    "+" <> rest -> #(PlusSign, rest)
-    "-" <> rest -> #(MinusSign, rest)
-    number -> {
-      case float.parse(number) {
-        Ok(fl) -> #(Number(fl), rest)
-        Error(Nil) -> #(UnknownToken(number), rest)
-      }
-    }
-  }
-  lex_tco(rest, [token, ..acc])
-}
-
-fn parse(expr: List(Token)) -> ASTNode {
+fn parse(expr: List(String)) -> ASTNode {
   ASTNode
 }
 
