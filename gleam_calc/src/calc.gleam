@@ -38,10 +38,10 @@ fn lex(expr: String) -> List(Token) {
       // match:
       <> "("
       // parens, operations OR
-      <> "[()\\+\\-*/]|"
+      <> "[()\\+\\-*/^]|"
       // not whitespace or parens or operations
       // (so numbers or funcions)
-      <> "[^\\s()\\+\\-*/]+"
+      <> "[^\\s()\\+\\-*/^]+"
       <> ")",
     )
   let matches = regexp.scan(regex, expr)
@@ -50,14 +50,22 @@ fn lex(expr: String) -> List(Token) {
     case str {
       "(" -> LeftParen
       ")" -> RightParen
-      "+" | "-" | "*" | "/" -> Operator(str)
+      "+" | "-" | "*" | "/" | "^" -> Operator(str)
       _ -> OtherToken(str)
     }
   })
 }
 
+fn parse_literals(tokens: List(Token)) -> #(ASTNode, List(Token)) {
+  case tokens {
+    [OtherToken("pi"), ..rest] -> #(Number(3.1415926535897932384), rest)
+    [OtherToken(token), ..] -> todo as { "unknown literal: " <> token }
+    _ -> panic as "unexpected arg in parse_literals"
+  }
+}
+
 // only nubers or functions or idk
-fn expr_from_tokens(tokens: List(Token)) -> #(ASTNode, List(Token)) {
+fn parse_expr(tokens: List(Token)) -> #(ASTNode, List(Token)) {
   case tokens {
     [LeftParen, ..] -> {
       let assert #(Some(parens), rest) = parse_with_rest(tokens, None)
@@ -70,9 +78,9 @@ fn expr_from_tokens(tokens: List(Token)) -> #(ASTNode, List(Token)) {
       let fl = float.parse(number)
       let fl =
         result.lazy_or(fl, fn() { result.map(int.parse(number), int.to_float) })
-      let element = case fl {
-        Ok(fl) -> Number(fl)
-        _ -> todo as "literals/function"
+      let #(element, rest) = case fl {
+        Ok(fl) -> #(Number(fl), rest)
+        _ -> parse_literals([OtherToken(number), ..rest])
       }
 
       case tokens {
@@ -87,6 +95,7 @@ fn expr_from_tokens(tokens: List(Token)) -> #(ASTNode, List(Token)) {
 fn is_preceding(root: String, new: String) {
   let get_prio = fn(node: String) -> Int {
     case node {
+      "^" -> 70
       "*" | "/" -> 60
       _ -> 50
     }
@@ -114,12 +123,12 @@ fn parse_with_rest(
     }
     [RightParen, ..rest], _ -> #(ast, rest)
     _, None -> {
-      let #(node, rest) = expr_from_tokens(tokens)
+      let #(node, rest) = parse_expr(tokens)
       parse_with_rest(rest, Some(node))
     }
     // new operation after other operation
     [Operator(new_op), ..rest], Some(BinaryOp(root_op, root_l, root_r)) -> {
-      let #(new_right, rest) = expr_from_tokens(rest)
+      let #(new_right, rest) = parse_expr(rest)
 
       let ast = case is_preceding(root_op, new_op) {
         True -> {
@@ -135,7 +144,7 @@ fn parse_with_rest(
     }
     // new operation
     [Operator(op), ..rest], Some(ast) -> {
-      let #(right, rest) = expr_from_tokens(rest)
+      let #(right, rest) = parse_expr(rest)
       let ast = BinaryOp(op, ast, right)
       parse_with_rest(rest, Some(ast))
     }
@@ -156,6 +165,10 @@ fn eval(ast: ASTNode) -> Float {
         "-" -> left -. right
         "*" -> left *. right
         "/" -> left /. right
+        "^" -> {
+          let assert Ok(pow) = float.power(left, right)
+          pow
+        }
         _ -> todo as { "unknown operation: " <> op }
       }
     }
