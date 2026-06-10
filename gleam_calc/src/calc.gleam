@@ -56,24 +56,14 @@ fn lex(expr: String) -> List(Token) {
   })
 }
 
-fn parse(expr: List(Token)) -> ASTNode {
-  option.unwrap(parse_(expr, None), Number(0.0))
-}
-
-fn add_to_ast(ast: Option(ASTNode), node: ASTNode) -> ASTNode {
-  use ast <- unwrap_or_return(ast, node)
-  todo as "add to ast"
-  // case ast {
-  //
-  // }
-}
-
 // only nubers or functions or idk
 fn expr_from_tokens(tokens: List(Token)) -> #(ASTNode, List(Token)) {
   case tokens {
-    // ["(", ..rest] -> {
-    //   parens(node_from_expr(rest))
-    // }
+    [LeftParen, ..] -> {
+      let assert #(Some(parens), rest) = parse_with_rest(tokens, None)
+        as "empty parens"
+      #(parens, rest)
+    }
     [Operator("+"), OtherToken(number), ..rest]
     | [Operator("-"), OtherToken(number), ..rest]
     | [OtherToken(number), ..rest] -> {
@@ -105,12 +95,27 @@ fn is_preceding(root: String, new: String) {
   get_prio(root) < get_prio(new)
 }
 
-fn parse_(tokens: List(Token), ast: Option(ASTNode)) -> Option(ASTNode) {
-  use <- bool.guard(list.is_empty(tokens), ast)
+fn parse(expr: List(Token)) -> ASTNode {
+  let #(ast, _) = parse_with_rest(expr, None)
+  option.unwrap(ast, Number(0.0))
+}
+
+fn parse_with_rest(
+  tokens: List(Token),
+  ast: Option(ASTNode),
+) -> #(Option(ASTNode), List(Token)) {
+  use <- bool.guard(list.is_empty(tokens), #(ast, []))
   case tokens, ast {
+    [LeftParen, ..rest], _ -> {
+      case parse_with_rest(rest, None) {
+        #(Some(insides), rest) -> #(Some(Parens(insides)), rest)
+        #(None, rest) -> #(None, rest)
+      }
+    }
+    [RightParen, ..rest], _ -> #(ast, rest)
     _, None -> {
       let #(node, rest) = expr_from_tokens(tokens)
-      parse_(rest, Some(node))
+      parse_with_rest(rest, Some(node))
     }
     // new operation after other operation
     [Operator(new_op), ..rest], Some(BinaryOp(root_op, root_l, root_r)) -> {
@@ -126,15 +131,15 @@ fn parse_(tokens: List(Token), ast: Option(ASTNode)) -> Option(ASTNode) {
           BinaryOp(new_op, ast, new_right)
         }
       }
-      parse_(rest, Some(ast))
+      parse_with_rest(rest, Some(ast))
     }
     // new operation
     [Operator(op), ..rest], Some(ast) -> {
       let #(right, rest) = expr_from_tokens(rest)
       let ast = BinaryOp(op, ast, right)
-      parse_(rest, Some(ast))
+      parse_with_rest(rest, Some(ast))
     }
-    _, Some(ast) -> Some(ast)
+    _, Some(ast) -> #(Some(ast), [])
   }
 }
 
@@ -151,7 +156,7 @@ fn eval(ast: ASTNode) -> Float {
         "-" -> left -. right
         "*" -> left *. right
         "/" -> left /. right
-        _ -> todo as "idk how to eval this op"
+        _ -> todo as { "unknown operation: " <> op }
       }
     }
   }
