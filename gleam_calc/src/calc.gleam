@@ -17,7 +17,6 @@ type Token {
 }
 
 type ASTNode {
-  ASTNode
   Number(value: Float)
   Negate(inside: ASTNode)
   Parens(inside: ASTNode)
@@ -139,8 +138,23 @@ fn parse_(tokens: List(Token), ast: Option(ASTNode)) -> Option(ASTNode) {
   }
 }
 
-fn eval(in: ASTNode) -> Float {
-  1.0
+fn eval(ast: ASTNode) -> Float {
+  case ast {
+    Number(number) -> number
+    Parens(inside) -> eval(inside)
+    Negate(inside) -> float.negate(eval(inside))
+    BinaryOp(op, left, right) -> {
+      let left = eval(left)
+      let right = eval(right)
+      case op {
+        "+" -> left +. right
+        "-" -> left -. right
+        "*" -> left *. right
+        "/" -> left /. right
+        _ -> todo as "idk how to eval this op"
+      }
+    }
+  }
 }
 
 fn to_string(ast: Float) -> String {
@@ -156,11 +170,10 @@ fn repl() {
     in -> {
       in
       |> lex()
-      |> echo as "lex"
+      // |> echo as "lex"
       |> parse()
-      |> echo as "parse"
+      |> echo as "parse output:"
       |> eval()
-      |> echo as "eval"
       |> to_string()
       |> io.println
       repl()
