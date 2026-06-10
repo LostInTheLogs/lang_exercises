@@ -115,8 +115,6 @@ fn parse_(tokens: List(Token), ast: Option(ASTNode)) -> Option(ASTNode) {
     }
     // new operation after other operation
     [Operator(new_op), ..rest], Some(BinaryOp(root_op, root_l, root_r)) -> {
-      let Some(ast) = ast
-
       let #(new_right, rest) = expr_from_tokens(rest)
 
       let ast = case is_preceding(root_op, new_op) {
@@ -125,6 +123,7 @@ fn parse_(tokens: List(Token), ast: Option(ASTNode)) -> Option(ASTNode) {
           BinaryOp(root_op, root_l, new_right)
         }
         False -> {
+          let Some(ast) = ast
           BinaryOp(new_op, ast, new_right)
         }
       }
