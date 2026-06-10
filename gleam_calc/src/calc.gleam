@@ -1,25 +1,24 @@
 import gleam/bool
 import gleam/float
-import gleam/int
 import gleam/io
 import gleam/list
-import gleam/regexp
+import gleam/option.{type Option, None, Some}
+import gleam/regexp.{Match}
 import gleam/result
-import gleam/string
 import input.{input}
 
-// type Token {
-//   Number(value: Float)
-//   PlusSign
-//   MinusSign
-//   LeftParen
-//   RightParen
-//   UnknownToken(str: String)
-// }
+type Token {
+  Number(value: Float)
+  Operator(op: String)
+  Literal(value: String)
+  LeftParen
+  RightParen
+}
 
 type ASTNode {
   ASTNode
-  BinaryOperation(op: String, left: ASTNode, right: ASTNode)
+  Parens(inside: ASTNode)
+  BinaryOperation(op: String, left: ASTNode, right: Option(ASTNode))
 }
 
 pub fn main() -> Nil {
@@ -29,7 +28,7 @@ pub fn main() -> Nil {
   io.println("bye")
 }
 
-fn lex(expr: String) -> List(String) {
+fn lex(expr: String) -> List(Token) {
   let assert Ok(regex) =
     regexp.from_string(
       // ignore whitespace
@@ -45,13 +44,43 @@ fn lex(expr: String) -> List(String) {
     )
   let matches = regexp.scan(regex, expr)
   list.map(matches, fn(match) {
-    let regexp.Match(str, _) = match
-    str
+    let assert Match(_, [Some(str)]) = match
+    case str {
+      "(" -> LeftParen
+      ")" -> RightParen
+      "+" | "-" | "*" | "/" -> Operator(str)
+      _ -> {
+        let fl = float.parse(str)
+        case fl {
+          Ok(fl) -> Number(fl)
+          Error(_) -> Literal(str)
+        }
+      }
+    }
   })
 }
 
-fn parse(expr: List(String)) -> ASTNode {
-  ASTNode
+fn parse(expr: List(Token)) -> ASTNode {
+  let assert #(result, []) = parse_(expr, None)
+  result
+}
+
+fn add_to_ast(ast: Option(ASTNode), node: ASTNode) -> ASTNode {
+  use ast <- unwrap_or_return(ast, node)
+  case ast {
+  }
+}
+
+fn parse_(expr: List(Token), head: Option(ASTNode)) -> #(ASTNode, List(Token)) {
+  case expr {
+    [RightParen, ..rest] -> 
+    [LeftParen, ..rest] -> {
+      let #(insides, rest) = parse_(rest, option.None)
+      let parens = Parens(insides)
+      parse_(rest, Some(add_to_ast(head, parens)))
+    }
+    _ -> #(ASTNode, [])
+  }
 }
 
 fn eval(in: ASTNode) -> Float {
@@ -80,5 +109,12 @@ fn repl() {
       |> io.println
       repl()
     }
+  }
+}
+
+fn unwrap_or_return(opt: Option(a), node: a, callback: fn(a) -> a) -> a {
+  case opt {
+    None -> node
+    Some(value) -> callback(value)
   }
 }
