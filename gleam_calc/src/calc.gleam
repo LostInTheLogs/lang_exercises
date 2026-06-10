@@ -59,7 +59,7 @@ fn lex(expr: String) -> List(Token) {
 fn parse_literals(tokens: List(Token)) -> #(ASTNode, List(Token)) {
   case tokens {
     [OtherToken("pi"), ..rest] -> #(Number(3.1415926535897932384), rest)
-    [OtherToken(token), ..] -> todo as { "unknown literal: " <> token }
+    [OtherToken(token), ..] -> panic as { "unknown literal: " <> token }
     _ -> panic as "unexpected arg in parse_literals"
   }
 }
@@ -88,7 +88,7 @@ fn parse_expr(tokens: List(Token)) -> #(ASTNode, List(Token)) {
         _ -> #(element, rest)
       }
     }
-    _ -> todo as "unknown node"
+    _ -> panic as "unknown node"
   }
 }
 
@@ -169,7 +169,7 @@ fn eval(ast: ASTNode) -> Float {
           let assert Ok(pow) = float.power(left, right)
           pow
         }
-        _ -> todo as { "unknown operation: " <> op }
+        _ -> panic as { "unknown operation: " <> op }
       }
     }
   }
@@ -196,12 +196,5 @@ fn repl() {
       |> io.println
       repl()
     }
-  }
-}
-
-fn unwrap_or_return(opt: Option(a), node: a, callback: fn(a) -> a) -> a {
-  case opt {
-    None -> node
-    Some(value) -> callback(value)
   }
 }
