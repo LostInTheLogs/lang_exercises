@@ -1,5 +1,6 @@
 import gleam/bool
 import gleam/float
+import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -8,17 +9,19 @@ import gleam/result
 import input.{input}
 
 type Token {
-  Number(value: Float)
+  //   Number(value: Float)
   Operator(op: String)
-  Literal(value: String)
   LeftParen
   RightParen
+  OtherToken(str: String)
 }
 
 type ASTNode {
   ASTNode
+  Number(value: Float)
+  Negate(inside: ASTNode)
   Parens(inside: ASTNode)
-  BinaryOperation(op: String, left: ASTNode, right: Option(ASTNode))
+  BinaryOp(op: String, left: ASTNode, right: Option(ASTNode))
 }
 
 pub fn main() -> Nil {
@@ -39,7 +42,7 @@ fn lex(expr: String) -> List(Token) {
       <> "[()\\+\\-*/]|"
       // not whitespace or parens or operations
       // (so numbers or funcions)
-      <> "[^\\s()\\+\\-*/]"
+      <> "[^\\s()\\+\\-*/]+"
       <> ")",
     )
   let matches = regexp.scan(regex, expr)
@@ -49,37 +52,101 @@ fn lex(expr: String) -> List(Token) {
       "(" -> LeftParen
       ")" -> RightParen
       "+" | "-" | "*" | "/" -> Operator(str)
-      _ -> {
-        let fl = float.parse(str)
-        case fl {
-          Ok(fl) -> Number(fl)
-          Error(_) -> Literal(str)
-        }
-      }
+      _ -> OtherToken(str)
     }
   })
 }
 
 fn parse(expr: List(Token)) -> ASTNode {
-  let assert #(result, []) = parse_(expr, None)
-  result
+  option.unwrap(parse_(expr, None), Number(0.0))
 }
 
 fn add_to_ast(ast: Option(ASTNode), node: ASTNode) -> ASTNode {
   use ast <- unwrap_or_return(ast, node)
-  case ast {
+  todo as "add to ast"
+  // case ast {
+  //
+  // }
+}
+
+// only nubers or functions or idk
+fn expr_from_tokens(tokens: List(Token)) -> #(ASTNode, List(Token)) {
+  case tokens {
+    // ["(", ..rest] -> {
+    //   parens(node_from_expr(rest))
+    // }
+    [Operator("+"), OtherToken(number), ..rest]
+    | [Operator("-"), OtherToken(number), ..rest]
+    | [OtherToken(number), ..rest] -> {
+      let fl = float.parse(number)
+      let fl =
+        result.lazy_or(fl, fn() { result.map(int.parse(number), int.to_float) })
+      let element = case fl {
+        Ok(fl) -> Number(fl)
+        _ -> todo as "literals/function"
+      }
+
+      case tokens {
+        [Operator("-"), ..] -> #(Negate(element), rest)
+        _ -> #(element, rest)
+      }
+    }
+    _ -> todo as "unknown node"
   }
 }
 
-fn parse_(expr: List(Token), head: Option(ASTNode)) -> #(ASTNode, List(Token)) {
-  case expr {
-    [RightParen, ..rest] -> 
-    [LeftParen, ..rest] -> {
-      let #(insides, rest) = parse_(rest, option.None)
-      let parens = Parens(insides)
-      parse_(rest, Some(add_to_ast(head, parens)))
+fn is_preceding(root: String, new: String) {
+  let get_prio = fn(node: String) -> Int {
+    case node {
+      "*" | "/" -> 60
+      _ -> 50
     }
-    _ -> #(ASTNode, [])
+  }
+
+  get_prio(root) < get_prio(new)
+}
+
+fn parse_(tokens: List(Token), ast: Option(ASTNode)) -> Option(ASTNode) {
+  use <- bool.guard(list.is_empty(tokens), ast)
+  case tokens, ast {
+    _, None -> {
+      let #(node, rest) = expr_from_tokens(tokens)
+      parse_(rest, Some(node))
+    }
+    // second operand of old operation
+    [_, ..], Some(BinaryOp(op, left, None)) -> {
+      let #(right, rest) = expr_from_tokens(tokens)
+      let ast = BinaryOp(op, left, Some(right))
+      parse_(rest, Some(ast))
+    }
+    // new operation after other operation
+    [Operator(new_op), ..rest], Some(BinaryOp(root_op, _, Some(ast_right))) -> {
+      let Some(ast) = ast
+
+      case is_preceding(root_op, new_op) {
+        True -> {
+          let assert BinaryOp(_, _, _) = ast
+          let #(right, rest) = expr_from_tokens(rest)
+          let ast =
+            BinaryOp(
+              ast.op,
+              ast.left,
+              Some(BinaryOp(new_op, ast_right, Some(right))),
+            )
+          parse_(rest, Some(ast))
+        }
+        False -> {
+          let ast = BinaryOp(new_op, ast, None)
+          parse_(rest, Some(ast))
+        }
+      }
+    }
+    // new operation
+    [Operator(op), ..rest], Some(ast) -> {
+      let ast = BinaryOp(op, ast, None)
+      parse_(rest, Some(ast))
+    }
+    _, Some(ast) -> Some(ast)
   }
 }
 
