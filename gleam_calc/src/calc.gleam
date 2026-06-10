@@ -21,7 +21,7 @@ type ASTNode {
   Number(value: Float)
   Negate(inside: ASTNode)
   Parens(inside: ASTNode)
-  BinaryOp(op: String, left: ASTNode, right: Option(ASTNode))
+  BinaryOp(op: String, left: ASTNode, right: ASTNode)
 }
 
 pub fn main() -> Nil {
@@ -113,37 +113,27 @@ fn parse_(tokens: List(Token), ast: Option(ASTNode)) -> Option(ASTNode) {
       let #(node, rest) = expr_from_tokens(tokens)
       parse_(rest, Some(node))
     }
-    // second operand of old operation
-    [_, ..], Some(BinaryOp(op, left, None)) -> {
-      let #(right, rest) = expr_from_tokens(tokens)
-      let ast = BinaryOp(op, left, Some(right))
-      parse_(rest, Some(ast))
-    }
     // new operation after other operation
-    [Operator(new_op), ..rest], Some(BinaryOp(root_op, _, Some(ast_right))) -> {
+    [Operator(new_op), ..rest], Some(BinaryOp(root_op, root_l, root_r)) -> {
       let Some(ast) = ast
 
-      case is_preceding(root_op, new_op) {
+      let #(new_right, rest) = expr_from_tokens(rest)
+
+      let ast = case is_preceding(root_op, new_op) {
         True -> {
-          let assert BinaryOp(_, _, _) = ast
-          let #(right, rest) = expr_from_tokens(rest)
-          let ast =
-            BinaryOp(
-              ast.op,
-              ast.left,
-              Some(BinaryOp(new_op, ast_right, Some(right))),
-            )
-          parse_(rest, Some(ast))
+          let new_right = BinaryOp(new_op, root_r, new_right)
+          BinaryOp(root_op, root_l, new_right)
         }
         False -> {
-          let ast = BinaryOp(new_op, ast, None)
-          parse_(rest, Some(ast))
+          BinaryOp(new_op, ast, new_right)
         }
       }
+      parse_(rest, Some(ast))
     }
     // new operation
     [Operator(op), ..rest], Some(ast) -> {
-      let ast = BinaryOp(op, ast, None)
+      let #(right, rest) = expr_from_tokens(rest)
+      let ast = BinaryOp(op, ast, right)
       parse_(rest, Some(ast))
     }
     _, Some(ast) -> Some(ast)
