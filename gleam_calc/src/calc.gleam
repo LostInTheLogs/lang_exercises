@@ -190,7 +190,7 @@ fn repl() {
       |> lex()
       // |> echo as "lex"
       |> parse()
-      |> echo as "parse output:"
+      // |> echo as "parse output:"
       |> eval()
       |> to_string()
       |> io.println
