@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-type-defaults #-}
+
 lucky :: (Integral a) => a -> String
 lucky 7 = "LUCKY NUMBER SEVEN!"
 lucky _ = "Sorry, you're out of luck, pal!"
@@ -35,5 +37,21 @@ densityTell mass volume
   | density < 1.2 = "Wow! You're going for a ride in the sky!"
   | density <= 1000.0 = "Have fun swimming, but watch out for sharks!"
   | otherwise = "If it's sink or swim, you're going to sink."
- where
-  density = mass / volume
+  where
+    density = mass / volume
+
+cylinder :: (RealFloat a) => a -> a -> a
+cylinder r h =
+  let sideArea = 2 * pi * r * h
+      topArea = pi * r ^ 2
+   in sideArea + 2 * topArea
+
+calcDensities :: (RealFloat a) => [(a, a)] -> [a]
+calcDensities xs = [density | (m, v) <- xs, let density = m / v]
+
+describeList :: [a] -> String
+describeList xs =
+  "The list is " ++ case xs of
+    [] -> "empty."
+    [_] -> "a singleton list."
+    _ -> "a longer list."
