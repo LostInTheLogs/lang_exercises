@@ -109,3 +109,12 @@ instance YesNo TrafficLight where
 
 yesnoIf :: (YesNo y) => y -> a -> a -> a
 yesnoIf yesnoVal yesResult noResult = if yesno yesnoVal then yesResult else noResult
+
+-- type - for aliases
+type IntList = [Int]
+
+-- newtype - a typed alias
+newtype ZipList a = ZipList {getZipList :: [a]}
+
+-- can be used to reorder params
+newtype Pair b a = Pair {getPair :: (a, b)}
