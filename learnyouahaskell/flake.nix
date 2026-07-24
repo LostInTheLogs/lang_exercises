@@ -2,7 +2,6 @@
   description = "A Hello World in Haskell with a dependency and a devShell (using flake-parts)";
 
   inputs = {
-    # nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     nixpkgs.url = "nixpkgs/nixos-26.05";
     flake-parts.url = "github:hercules-ci/flake-parts";
   };
@@ -14,11 +13,12 @@
     ...
   }:
     flake-parts.lib.mkFlake {inherit inputs;} {
-      systems = ["x86_64-linux" "x86_64-darwin"];
+      systems = ["x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin"];
 
       flake = {
         overlay = final: prev: {
-          haskell-app = final.haskellPackages.callCabal2nix "haskell-app" ./. {};
+          # Attach directly to the top-level pkgs scope
+          haskell-app = final.haskell.packages.ghc984.callCabal2nix "haskell-app" ./. {};
         };
       };
 
@@ -30,6 +30,7 @@
         system,
         ...
       }: let
+        hp = pkgs.haskell.packages.ghc984;
       in {
         _module.args.pkgs = import inputs.nixpkgs {
           inherit system;
@@ -40,20 +41,25 @@
         };
 
         packages = {
-          haskell-app = pkgs.haskellPackages.haskell-app;
+          haskell-app = pkgs.haskell-app;
           default = pkgs.haskell-app;
         };
 
         checks = self'.packages;
 
-        devShells.default = pkgs.haskellPackages.shellFor {
+        devShells.default = hp.shellFor {
+          # Reference pkgs.haskell-app here since overlay put it on top-level pkgs
           packages = p: [pkgs.haskell-app];
           withHoogle = true;
-          buildInputs = with pkgs.haskellPackages; [
-            haskell-language-server
-            dap
-            ghcid
-            cabal-install
+          buildInputs = [
+            (pkgs.haskell-language-server.override {
+              supportedGhcVersions = [
+                "984"
+              ];
+            })
+            # pkgs.dap
+            hp.ghcid
+            hp.cabal-install
           ];
         };
       };
