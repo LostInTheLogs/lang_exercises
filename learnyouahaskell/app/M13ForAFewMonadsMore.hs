@@ -1,4 +1,6 @@
+import Control.Monad (ap)
 import Control.Monad.Writer
+import Data.List (all)
 import Data.Ratio
 
 gcd' :: Int -> Int -> Writer [String] Int
@@ -48,6 +50,7 @@ flatten (Prob xs) = Prob $ concat $ map multAll xs
 
 instance Applicative Prob where
     pure x = Prob [(x, 1 % 1)]
+    f <*> a = flatten $ fmap (\ff -> fmap ff a) f
 
 instance Monad Prob where
     return = pure
@@ -55,3 +58,18 @@ instance Monad Prob where
 
 instance MonadFail Prob where
     fail _ = Prob []
+
+data Coin = Heads | Tails deriving (Show, Eq)
+
+coin :: Prob Coin
+coin = Prob [(Heads, 1 % 2), (Tails, 1 % 2)]
+
+loadedCoin :: Prob Coin
+loadedCoin = Prob [(Heads, 1 % 10), (Tails, 9 % 10)]
+
+flipThree :: Prob Bool
+flipThree = do
+    a <- coin
+    b <- coin
+    c <- loadedCoin
+    return (all (== Tails) [a, b, c])
