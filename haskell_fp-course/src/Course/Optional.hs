@@ -114,15 +114,18 @@ contains _ Empty = False
 contains a (Full z) = a == z
 
 instance P.Functor Optional where
+  fmap :: (a -> b) -> Optional a -> Optional b
   fmap =
     M.liftM
 
 instance A.Applicative Optional where
+  (<*>) :: Optional (a -> b) -> Optional a -> Optional b
   (<*>) =
     M.ap
   pure =
     Full
 
 instance P.Monad Optional where
+  (>>=) :: Optional a -> (a -> Optional b) -> Optional b
   (>>=) =
     flip bindOptional
