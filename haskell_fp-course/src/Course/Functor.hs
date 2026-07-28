@@ -74,8 +74,8 @@ instance Functor Optional where
     (a -> b) ->
     Optional a ->
     Optional b
-  (<$>) =
-    error "todo: Course.Functor (<$>)#instance Optional"
+  _ <$> Empty = Empty
+  f <$> (Full a) = Full $ f a
 
 {- | Maps a function on the reader ((->) t) functor.
 
@@ -87,8 +87,7 @@ instance Functor ((->) t) where
     (a -> b) ->
     ((->) t a) ->
     ((->) t b)
-  (<$>) =
-    error "todo: Course.Functor (<$>)#((->) t)"
+  f <$> g = f . g
 
 {- | Anonymous map. Maps a constant value on a functor.
 
@@ -104,8 +103,7 @@ prop> \x q -> x <$ Full q == Full x
   a ->
   k b ->
   k a
-(<$) =
-  error "todo: Course.Functor#(<$)"
+a <$ b = const a <$> b
 
 {- | Apply a value to a functor-of-functions.
 
@@ -130,8 +128,7 @@ Empty
   k (a -> b) ->
   a ->
   k b
-(??) =
-  error "todo: Course.Functor#(??)"
+functor ?? a = (\f -> f a) <$> functor
 
 infixl 1 ??
 
@@ -153,8 +150,7 @@ void ::
   (Functor k) =>
   k a ->
   k ()
-void =
-  error "todo: Course.Functor#void"
+void a = () <$ a
 
 -----------------------
 -- SUPPORT LIBRARIES --
