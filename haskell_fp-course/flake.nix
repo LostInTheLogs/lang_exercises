@@ -60,6 +60,7 @@
             # pkgs.dap
             hp.ghcid
             hp.cabal-install
+            pkgs.fourmolu
           ];
         };
       };
