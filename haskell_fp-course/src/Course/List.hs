@@ -309,7 +309,8 @@ True
 lengthGT4 ::
   List a ->
   Bool
-lengthGT4 a = length a > 4
+lengthGT4 (_ :. _ :. _ :. _ :. _ :. _) = True
+lengthGT4 _ = False
 
 {- | Reverse a list.
 
