@@ -26,6 +26,9 @@ class Functor k where
     k a ->
     k b
 
+  fmap :: (a -> b) -> k a -> k b
+  fmap = (<$>)
+
 infixl 4 <$>
 
 {- $setup
