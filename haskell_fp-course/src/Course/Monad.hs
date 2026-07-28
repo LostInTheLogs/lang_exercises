@@ -38,8 +38,7 @@ instance Monad ExactlyOne where
     (a -> ExactlyOne b) ->
     ExactlyOne a ->
     ExactlyOne b
-  (=<<) =
-    error "todo: Course.Monad (=<<)#instance ExactlyOne"
+  f =<< (ExactlyOne a) = f a
 
 {- | Binds a function on a List.
 
@@ -51,8 +50,7 @@ instance Monad List where
     (a -> List b) ->
     List a ->
     List b
-  (=<<) =
-    error "todo: Course.Monad (=<<)#instance List"
+  f =<< a = flatten $ f <$> a
 
 {- | Binds a function on an Optional.
 
@@ -64,8 +62,8 @@ instance Monad Optional where
     (a -> Optional b) ->
     Optional a ->
     Optional b
-  (=<<) =
-    error "todo: Course.Monad (=<<)#instance Optional"
+  _ =<< Empty = Empty
+  f =<< Full a = f a
 
 {- | Binds a function on the reader ((->) t).
 
@@ -77,8 +75,7 @@ instance Monad ((->) t) where
     (a -> ((->) t b)) ->
     ((->) t a) ->
     ((->) t b)
-  (=<<) =
-    error "todo: Course.Monad (=<<)#instance ((->) t)"
+  f =<< a = \x -> f (a x) x
 
 {- | Witness that all things with (=<<) and (<$>) also have (<*>).
 
@@ -86,7 +83,8 @@ instance Monad ((->) t) where
 ExactlyOne 18
 
 >>> (+1) :. (*2) :. Nil <**> 1 :. 2 :. 3 :. Nil
-[2,3,4,2,4,6]
+WAS [2,3,4,2,4,6]
+NOW [2,2,3,4,4,6]
 
 >>> Full (+8) <**> Full 7
 Full 15
@@ -117,8 +115,7 @@ Empty
   k (a -> b) ->
   k a ->
   k b
-(<**>) =
-  error "todo: Course.Monad#(<**>)"
+kf <**> ka = (<$> ka) =<< kf
 
 infixl 4 <**>
 
@@ -140,8 +137,7 @@ join ::
   (Monad k) =>
   k (k a) ->
   k a
-join =
-  error "todo: Course.Monad#join"
+join x = id =<< x
 
 {- | Implement a flipped version of @(=<<)@, however, use only
 @join@ and @(<$>)@.
@@ -150,13 +146,13 @@ Pronounced, bind flipped.
 >>> ((+10) >>= (*)) 7
 119
 -}
+{-# ANN (>>=) "HLint: ignore Use =<<" #-}
 (>>=) ::
   (Monad k) =>
   k a ->
   (a -> k b) ->
   k b
-(>>=) =
-  error "todo: Course.Monad#(>>=)"
+a >>= f = join $ f <$> a
 
 infixl 1 >>=
 
@@ -170,10 +166,10 @@ Pronounced, Kleisli composition.
   (Monad k) =>
   (b -> k c) ->
   (a -> k b) ->
-  a ->
-  k c
-(<=<) =
-  error "todo: Course.Monad#(<=<)"
+  (a -> k c)
+(f <=< g) x = do
+  b <- g x
+  f b
 
 infixr 1 <=<
 
