@@ -83,6 +83,9 @@ library
                       Course.Traversable
                       Course.Validation
                       Test.ApplicativeTest
+                      Test.AlternativeTest
+                      Test.ComposeTest
+                      Test.ContravariantTest
                       Test.ChequeTest
                       Test.ComonadTest
                       Test.ExtendTest
