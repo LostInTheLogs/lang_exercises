@@ -1,11 +1,11 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module Course.FastAnagrams where
 
 import Course.Core
-import Course.List
 import Course.Functor
+import Course.List
 import qualified Data.Set as S
 
 -- Return all anagrams of the given string
@@ -13,19 +13,19 @@ import qualified Data.Set as S
 -- on a Mac - run this with:
 -- > fastAnagrams "Tony" "/usr/share/dict/words"
 fastAnagrams ::
-  Chars
-  -> FilePath
-  -> IO (List Chars)
+  Chars ->
+  FilePath ->
+  IO (List Chars)
 fastAnagrams =
   error "todo: Course.FastAnagrams#fastAnagrams"
 
-newtype NoCaseString =
-  NoCaseString
-    Chars
+newtype NoCaseString
+  = NoCaseString
+      Chars
 
 ncString ::
-  NoCaseString
-  -> Chars
+  NoCaseString ->
+  Chars
 ncString (NoCaseString s) =
   s
 

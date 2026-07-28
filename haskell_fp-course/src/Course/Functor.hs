@@ -10,15 +10,14 @@ import Course.List
 import Course.Optional
 import qualified Prelude as P (fmap)
 
-{- | All instances of the `Functor` type-class must satisfy two laws. These laws
-are not checked by the compiler. These laws are given as:
-
-* The law of identity
-  `∀x. (id <$> x) ≅ x`
-
-* The law of composition
-  `∀f g x.(f . g <$> x) ≅ (f <$> (g <$> x))`
--}
+-- | All instances of the `Functor` type-class must satisfy two laws. These laws
+-- are not checked by the compiler. These laws are given as:
+--
+-- * The law of identity
+--  `∀x. (id <$> x) ≅ x`
+--
+-- * The law of composition
+--  `∀f g x.(f . g <$> x) ≅ (f <$> (g <$> x))`
 class Functor k where
   -- Pronounced, eff-map.
   (<$>) ::
@@ -28,17 +27,15 @@ class Functor k where
 
 infixl 4 <$>
 
-{- $setup
->>> :set -XOverloadedStrings
->>> import Course.Core
->>> import qualified Prelude as P(return, (>>))
--}
+-- $setup
+-- >>> :set -XOverloadedStrings
+-- >>> import Course.Core
+-- >>> import qualified Prelude as P(return, (>>))
 
-{- | Maps a function on the ExactlyOne functor.
-
->>> (+1) <$> ExactlyOne 2
-ExactlyOne 3
--}
+-- | Maps a function on the ExactlyOne functor.
+--
+-- >>> (+1) <$> ExactlyOne 2
+-- ExactlyOne 3
 instance Functor ExactlyOne where
   (<$>) ::
     (a -> b) ->
@@ -46,14 +43,13 @@ instance Functor ExactlyOne where
     ExactlyOne b
   f <$> (ExactlyOne a) = ExactlyOne $ f a
 
-{- | Maps a function on the List functor.
-
->>> (+1) <$> Nil
-[]
-
->>> (+1) <$> (1 :. 2 :. 3 :. Nil)
-[2,3,4]
--}
+-- | Maps a function on the List functor.
+--
+-- >>> (+1) <$> Nil
+-- []
+--
+-- >>> (+1) <$> (1 :. 2 :. 3 :. Nil)
+-- [2,3,4]
 instance Functor List where
   (<$>) ::
     (a -> b) ->
@@ -62,14 +58,13 @@ instance Functor List where
   (<$>) =
     error "todo: Course.Functor (<$>)#instance List"
 
-{- | Maps a function on the Optional functor.
-
->>> (+1) <$> Empty
-Empty
-
->>> (+1) <$> Full 2
-Full 3
--}
+-- | Maps a function on the Optional functor.
+--
+-- >>> (+1) <$> Empty
+-- Empty
+--
+-- >>> (+1) <$> Full 2
+-- Full 3
 instance Functor Optional where
   (<$>) ::
     (a -> b) ->
@@ -78,11 +73,10 @@ instance Functor Optional where
   (<$>) =
     error "todo: Course.Functor (<$>)#instance Optional"
 
-{- | Maps a function on the reader ((->) t) functor.
-
->>> ((+1) <$> (*2)) 8
-17
--}
+-- | Maps a function on the reader ((->) t) functor.
+--
+-- >>> ((+1) <$> (*2)) 8
+-- 17
 instance Functor ((->) t) where
   (<$>) ::
     (a -> b) ->
@@ -91,15 +85,14 @@ instance Functor ((->) t) where
   (<$>) =
     error "todo: Course.Functor (<$>)#((->) t)"
 
-{- | Anonymous map. Maps a constant value on a functor.
-
->>> 7 <$ (1 :. 2 :. 3 :. Nil)
-[7,7,7]
-
-prop> \x a b c -> x <$ (a :. b :. c :. Nil) == (x :. x :. x :. Nil)
-
-prop> \x q -> x <$ Full q == Full x
--}
+-- | Anonymous map. Maps a constant value on a functor.
+--
+-- >>> 7 <$ (1 :. 2 :. 3 :. Nil)
+-- [7,7,7]
+--
+-- prop> \x a b c -> x <$ (a :. b :. c :. Nil) == (x :. x :. x :. Nil)
+--
+-- prop> \x q -> x <$ Full q == Full x
 (<$) ::
   (Functor k) =>
   a ->
@@ -108,24 +101,23 @@ prop> \x q -> x <$ Full q == Full x
 (<$) =
   error "todo: Course.Functor#(<$)"
 
-{- | Apply a value to a functor-of-functions.
-
-__NOTE__: The second argument is a bare @a@, not a @k a@. You need
-a more powerful typeclass, 'Applicative', if you want both the
-functions and the argmuents to be "inside" the Functor:
-
-@
-(<*>) :: Applicative k => k (a -> b) -> k a -> k b
-@
-
-We will talk about 'Applicative' soon.
-
->>> (*2) :. (+1) :. const 99 :. Nil ?? 8
-[16,9,99]
-
->>> Empty ?? 2
-Empty
--}
+-- | Apply a value to a functor-of-functions.
+--
+-- __NOTE__: The second argument is a bare @a@, not a @k a@. You need
+-- a more powerful typeclass, 'Applicative', if you want both the
+-- functions and the argmuents to be "inside" the Functor:
+--
+-- @
+-- (<*>) :: Applicative k => k (a -> b) -> k a -> k b
+-- @
+--
+-- We will talk about 'Applicative' soon.
+--
+-- >>> (*2) :. (+1) :. const 99 :. Nil ?? 8
+-- [16,9,99]
+--
+-- >>> Empty ?? 2
+-- Empty
 (??) ::
   (Functor k) =>
   k (a -> b) ->
@@ -136,20 +128,19 @@ Empty
 
 infixl 1 ??
 
-{- | Anonymous map producing unit value.
-
->>> void (1 :. 2 :. 3 :. Nil)
-[(),(),()]
-
->>> void (Full 7)
-Full ()
-
->>> void Empty
-Empty
-
->>> void (+10) 5
-()
--}
+-- | Anonymous map producing unit value.
+--
+-- >>> void (1 :. 2 :. 3 :. Nil)
+-- [(),(),()]
+--
+-- >>> void (Full 7)
+-- Full ()
+--
+-- >>> void Empty
+-- Empty
+--
+-- >>> void (+10) 5
+-- ()
 void ::
   (Functor k) =>
   k a ->
@@ -161,11 +152,10 @@ void =
 -- SUPPORT LIBRARIES --
 -----------------------
 
-{- | Maps a function on an IO program.
-
->>> reverse <$> (putStr "hi" P.>> P.return ("abc" :: List Char))
-hi"cba"
--}
+-- | Maps a function on an IO program.
+--
+-- >>> reverse <$> (putStr "hi" P.>> P.return ("abc" :: List Char))
+-- hi"cba"
 instance Functor IO where
   (<$>) =
     P.fmap
