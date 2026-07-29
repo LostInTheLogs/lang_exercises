@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RebindableSyntax #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Course.FileIO where
@@ -10,6 +11,7 @@ import Course.Core
 import Course.Functor
 import Course.List
 import Course.Monad
+import qualified Prelude as P
 
 {-
 
@@ -85,46 +87,61 @@ printFile ::
   FilePath ->
   Chars ->
   IO ()
-printFile =
-  error "todo: Course.FileIO#printFile"
+printFile name contents = do
+  putStrLn $ "====" ++ name
+  putStrLn contents
 
 -- Given a list of (file name and file contents), print each.
 -- Use @printFile@.
 printFiles ::
   List (FilePath, Chars) ->
   IO ()
-printFiles =
-  error "todo: Course.FileIO#printFiles"
+printFiles = void . sequence . map (uncurry printFile)
 
 -- Given a file name, return (file name and file contents).
 -- Use @readFile@.
 getFile ::
   FilePath ->
   IO (FilePath, Chars)
-getFile =
-  error "todo: Course.FileIO#getFile"
+getFile = (<$>) <$> (,) <*> readFile
+-- same as
+-- getFile path = do
+--   contents <- readFile path
+--   pure (path, contents)
+--
+-- the wrapper/context here is that the first argument is already applied
+-- getFile = lift2 (<$>) (,) readFile
+-- getFile = lift2 fmap (,) readFile
+--
+-- clearly visible here:
+-- getFile =       lift2 fmap (,)      readFile
+-- getFile path =        fmap  (path,) (readFile path)
+--
+--
 
 -- Given a list of file names, return list of (file name and file contents).
 -- Use @getFile@.
 getFiles ::
   List FilePath ->
   IO (List (FilePath, Chars))
-getFiles =
-  error "todo: Course.FileIO#getFiles"
+getFiles = 
 
 -- Given a file name, read it and for each line in that file, read and print contents of each.
 -- Use @getFiles@, @lines@, and @printFiles@.
 run ::
   FilePath ->
   IO ()
-run =
-  error "todo: Course.FileIO#run"
+run path = do
+  pahts <- readFile path
+  files <- getFiles $ lines pahts
+  printFiles files
 
 -- /Tip:/ use @getArgs@ and @run@
 main ::
   IO ()
-main =
-  error "todo: Course.FileIO#main"
+main = do
+  (file :. _) <- getArgs
+  run file
 
 ----
 
