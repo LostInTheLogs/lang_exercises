@@ -104,6 +104,7 @@ getFile ::
   FilePath ->
   IO (FilePath, Chars)
 getFile = (<$>) <$> (,) <*> readFile
+
 -- same as
 -- getFile path = do
 --   contents <- readFile path
@@ -124,7 +125,7 @@ getFile = (<$>) <$> (,) <*> readFile
 getFiles ::
   List FilePath ->
   IO (List (FilePath, Chars))
-getFiles = 
+getFiles = sequence . fmap getFile
 
 -- Given a file name, read it and for each line in that file, read and print contents of each.
 -- Use @getFiles@, @lines@, and @printFiles@.
