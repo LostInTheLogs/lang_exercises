@@ -29,6 +29,12 @@ class Functor k where
   fmap :: (a -> b) -> k a -> k b
   fmap = (<$>)
 
+  (<&>) ::
+    k a ->
+    (a -> b) ->
+    k b
+  (<&>) = flip fmap
+
 infixl 4 <$>
 
 {- $setup
