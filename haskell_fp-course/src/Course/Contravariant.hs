@@ -6,6 +6,8 @@ module Course.Contravariant where
 
 import Course.Core
 
+import Prelude (String, pure, (>>=))
+
 {- | A 'Predicate' is usually some kind of test about a
 thing. Example: a 'Predicate Integer' says "give me an 'Integer'"
 and I'll answer 'True' or 'False'.
@@ -85,8 +87,7 @@ instance Contravariant Predicate where
     (b -> a) ->
     Predicate a ->
     Predicate b
-  (>$<) =
-    error "todo: Course.Contravariant (>$<)#instance Predicate"
+  f >$< (Predicate pa) = Predicate $ pa . f
 
 {- | Use the function before comparing.
 
@@ -98,8 +99,7 @@ instance Contravariant Comparison where
     (b -> a) ->
     Comparison a ->
     Comparison b
-  (>$<) =
-    error "todo: Course.Contravariant (>$<)#instance Comparison"
+  f >$< (Comparison pa) = Comparison $ \a b -> pa (f a) (f b)
 
 {- | The kind of the argument to 'Contravariant' is @Type -> Type@, so
 our '(>$<)' only works on the final type argument. The
@@ -114,18 +114,17 @@ instance Contravariant (SwappedArrow t) where
     (b -> a) ->
     SwappedArrow x a ->
     SwappedArrow x b
-  (>$<) =
-    error "todo: Course.Contravariant (>$<)#instance SwappedArrow"
+  f >$< (SwappedArrow sa) = SwappedArrow $ sa . f
 
 {- | If we give our 'Contravariant' an @a@, then we can "accept" any
 @b@ by ignoring it.
 
 prop> \x -> runPredicate (3 >$ Predicate odd) x == True
++++ OK, passed 100 tests.
 -}
 (>$) ::
   (Contravariant k) =>
   a ->
   k a ->
   k b
-(>$) =
-  error "todo: Course.Contravariant#(>$)"
+a >$ cv = const a >$< cv
