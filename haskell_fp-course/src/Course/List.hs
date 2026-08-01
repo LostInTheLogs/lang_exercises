@@ -735,3 +735,22 @@ instance A.Applicative List where
 instance P.Monad List where
   (>>=) =
     flip flatMap
+
+--
+
+{- MY OWN
+>>> tails (1 :. 2 :. 3 :. 4 :. Nil)
+[[1,2,3,4],[2,3,4],[3,4],[4],[]]
+-}
+tails :: List a -> List (List a)
+tails Nil = Nil :. Nil
+tails (x :. xs) = (x :. xs) :. tails xs
+
+{- MY OWN
+>>> init (1 :. 2 :. 3 :. 4 :. Nil)
+[1,2,3]
+-}
+init :: List a -> List a
+init Nil = Nil
+init (_ :. Nil) = Nil
+init (h :. t) = h :. (init t)
