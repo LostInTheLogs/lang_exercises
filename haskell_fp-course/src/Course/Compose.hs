@@ -9,6 +9,16 @@ import Course.Core
 import Course.Functor
 import Course.Monad
 
+import Course.Applicative
+import Course.Core
+import Course.Functor
+import Course.List
+import Course.Monad
+import Course.Optional
+import Data.Set
+import qualified Data.Set as S
+import qualified Prelude as P
+
 -- Exactly one of these exercises will not be possible to achieve. Determine which.
 
 newtype Compose f g a
@@ -20,20 +30,28 @@ instance
   (Functor f, Functor g) =>
   Functor (Compose f g)
   where
-  (<$>) =
-    error "todo: Course.Compose (<$>)#instance (Compose f g)"
+  (<$>) ::
+    (Functor f, Functor g) =>
+    (a -> b) ->
+    Compose f g a ->
+    Compose f g b
+  f <$> (Compose a) = Compose $ (f <$>) <$> a
 
 instance
   (Applicative f, Applicative g) =>
   Applicative (Compose f g)
   where
   -- Implement the pure function for an Applicative instance for Compose
-  pure =
-    error "todo: Course.Compose pure#instance (Compose f g)"
+  pure :: (Applicative f, Applicative g) => a -> Compose f g a
+  pure = Compose . pure . pure
 
   -- Implement the (<*>) function for an Applicative instance for Compose
-  (<*>) =
-    error "todo: Course.Compose (<*>)#instance (Compose f g)"
+  (<*>) ::
+    (Applicative f, Applicative g) =>
+    Compose f g (a -> b) ->
+    Compose f g a ->
+    Compose f g b
+  Compose fgf <*> Compose fga = Compose $ (<*>) <$> fgf <*> fga
 
 instance
   (Monad f, Monad g) =>
@@ -51,5 +69,9 @@ instance
   Contravariant (Compose f g)
   where
   -- Implement the (>$<) function for a Contravariant instance for Compose
-  (>$<) =
-    error "todo: Course.Compose (>$<)#instance (Compose f g)"
+  (>$<) ::
+    (Functor f, Contravariant g) =>
+    (b -> a) ->
+    Compose f g a ->
+    Compose f g b
+  f >$< Compose g = Compose $ (f >$<) <$> g

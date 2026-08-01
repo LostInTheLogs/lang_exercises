@@ -8,8 +8,8 @@
 
 #### Special note 1
 
-If you have arrived here by https://github.com/system-f/fp-course and you are
-looking for the *answers* (not the exercises), please go to https://github.com/tonymorris/fp-course
+If you have arrived here by <https://github.com/system-f/fp-course> and you are
+looking for the _answers_ (not the exercises), please go to <https://github.com/tonymorris/fp-course>
 
 #### Special note 2
 
@@ -48,10 +48,10 @@ however, your first post might be moderated. This is simply to prevent spam.
    programming course material. This mailing list is not owned by System F, but is
    run by others who are keen to share ideas relating to the course.
 
-4. \#bfpg [on Libera.chat](ircs://irc.libera.chat:6697/#bfpg) is the IRC channel of the
+3. \#bfpg [on Libera.chat](ircs://irc.libera.chat:6697/#bfpg) is the IRC channel of the
    Queensland Functional Programming Lab - the team that runs the course in Brisbane.
 
-5. \#scalaz [on Libera.chat](ircs://irc.libera.chat:6697/#scalaz) is an IRC channel that is operated
+4. \#scalaz [on Libera.chat](ircs://irc.libera.chat:6697/#scalaz) is an IRC channel that is operated
    by others who are keen to share ideas relating to functional programming in
    general. Most of the participants of this channel have completed the System F
    functional programming course to some extent. They are in various timezones
@@ -80,13 +80,14 @@ however, your first post might be moderated. This is simply to prevent spam.
 
 ### Tips after having started
 
-1. Some questions take a particular form. These are called *WTF questions*. WTF
+1. Some questions take a particular form. These are called _WTF questions_. WTF
    questions are those of this form or similar:
-  * What does ____ mean?
-  * What does the ____ function mean?
-  * What is a ____ ?
-  * Where did ____ come from ?
-  * What is the structure of ____ ?
+
+- What does ____ mean?
+- What does the ____ function mean?
+- What is a ____ ?
+- Where did ____ come from ?
+- What is the structure of ____ ?
 
   They are all answerable with the `:info` command. For example, suppose you
   have the question, "What does the `swiggletwoop` function mean?" You may
@@ -96,7 +97,7 @@ however, your first post might be moderated. This is simply to prevent spam.
 
   You may also use `:i` for short.
 
-2. Functional Programming techniques rely heavily on types. This reliance may
+1. Functional Programming techniques rely heavily on types. This reliance may
    feel foreign at first, however, it is an important part of this course. If
    you wish to know the type of an expression or value, use `:type`. For
    example,
@@ -111,7 +112,7 @@ however, your first post might be moderated. This is simply to prevent spam.
 
    You may also use `:t` for short.
 
-3. GHCi has TAB-completion. For example you might type the following:
+2. GHCi has TAB-completion. For example you might type the following:
 
    `> :type rev`
 
@@ -132,7 +133,7 @@ however, your first post might be moderated. This is simply to prevent spam.
    If there is more than one identifier that can complete, hit TAB twice
    quickly. This will present you with your options to complete.
 
-4. Follow the types.
+3. Follow the types.
 
    You may find yourself in a position of being unsure how to proceed for a
    given exercise. You are encouraged to adopt a different perspective. Instead
@@ -148,7 +149,7 @@ however, your first post might be moderated. This is simply to prevent spam.
    They can be copied and pasted into GHCi. You should also take the first step
    of following the types. Do it.
 
-5. Do not use tab characters
+4. Do not use tab characters
 
    Set up your text editor to use space characters rather than tabs.
    Using tab characters in Haskell can lead to confusing error messages.
@@ -198,8 +199,8 @@ Examples begin with `>>>` while properties begin with `prop>`.
 We recommend you perform some exercises before others. The first step
 is to inspect the introduction modules.
 
-* `Course.ExactlyOne`
-* `Course.Validation`
+- `Course.ExactlyOne`
+- `Course.Validation`
 
 They contain examples of data structures and Haskell syntax. They do not contain
 exercises and exist to provide a cursory examination of Haskell syntax. The next
@@ -207,26 +208,28 @@ step is to complete the exercises in `Course.Optional`.
 
 After this, we recommend the following progression of modules:
 
-* `Course.List`
-* `Course.Functor`
-* `Course.Applicative`
-* `Course.Monad`
-* `Course.FileIO`
-* `Course.State`
-* `Course.StateT`
-* `Course.Extend`
-* `Course.Comonad`
-* `Course.Contravariant`
-* `Course.Compose`
-* `Course.Traversable`
-* `Course.ListZipper`
-* `Course.Parser` *(see also `Course.Person` for the parsing rules)*
-* `Course.MoreParser`
-* `Course.JsonParser`
-* `Course.Interactive`
-* `Course.Anagrams`
-* `Course.FastAnagrams`
-* `Course.Cheque`
+- `Course.List`
+- `Course.Functor`
+- `Course.Applicative`
+- `Course.Monad`
+- `Course.FileIO`
+- `Course.State`
+- `Course.StateT`
+- `Course.Extend`
+- `Course.Comonad`
+- `Course.Contravariant`
+- `Course.Compose`
+- `Course.Traversable`
+- `Course.ListZipper`
+- `Course.Parser` _(see also `Course.Person` for the parsing rules)_
+- `Course.MoreParser`
+- `Course.JsonParser`
+- `Course.Interactive`
+- `Course.Anagrams`
+- `Course.FastAnagrams`
+- `Course.Cheque`
+
+import Prelude (String, pure, (>>=))
 
 During this progression, it is often the case that some exercises are abandoned
 due to time constraints and the benefit of completing some exercises over
@@ -247,98 +250,98 @@ After these are completed, complete the exercises in the `projects` directory.
 This section is a guide for the instructor to introduce Haskell syntax. Each of
 these points should be covered before attempting the exercises.
 
-* values, assignment
-* type signatures `::` reads as *has the type*
-  * The `->` in a type signature is *right-associative*
-* functions are values
-* functions take arguments
-  * functions take *only one argument* but we approximate with spoken
+- values, assignment
+- type signatures `::` reads as _has the type_
+  - The `->` in a type signature is _right-associative_
+- functions are values
+- functions take arguments
+  - functions take _only one argument_ but we approximate with spoken
     language
-  * functions can be declared inline using *lambda expressions*
-  * the `\` symbol in a lambda expression denotes a Greek lambda
-* operators, beginning with non-alpha character, are in infix position by
+  - functions can be declared inline using _lambda expressions_
+  - the `\` symbol in a lambda expression denotes a Greek lambda
+- operators, beginning with non-alpha character, are in infix position by
   default
-  * use in prefix position by surrounding with *(parentheses)*
-* regular identifiers, beginning with alpha character, are in prefix position by
+  - use in prefix position by surrounding with _(parentheses)_
+- regular identifiers, beginning with alpha character, are in prefix position by
   default
-  * use in infix position by surrounding with ``backticks``
-* polymorphism
-  * type variables *always* start with a lower-case character
-* data types, declared using the `data` keyword
-  * following the `data` keyword is the *data type name*
-  * following the data type name are zero of more type variables
-  * then `=` sign
-  * data types have zero or more constructors
-    * data type constructors start with an upper-case character, or colon `(:)`
-  * following each constructor is a list of zero or more *constructor arguments*
-  * between each constructor is a pipe symbol `(|)`
-  * the `deriving` keyword gives us default implementations for some functions
+  - use in infix position by surrounding with `backticks`
+- polymorphism
+  - type variables _always_ start with a lower-case character
+- data types, declared using the `data` keyword
+  - following the `data` keyword is the _data type name_
+  - following the data type name are zero of more type variables
+  - then `=` sign
+  - data types have zero or more constructors
+    - data type constructors start with an upper-case character, or colon `(:)`
+  - following each constructor is a list of zero or more _constructor arguments_
+  - between each constructor is a pipe symbol `(|)`
+  - the `deriving` keyword gives us default implementations for some functions
     on that data type
-  * when constructors appear on the left side of `=` we are *pattern-matching*
-  * when constructors appear on the right side of `=` we are *constructing*
-* type-classes
+  - when constructors appear on the left side of `=` we are _pattern-matching_
+  - when constructors appear on the right side of `=` we are _constructing_
+- type-classes
 
 ### Learning the tools
 
 When this course is run in-person, some tools, particularly within Haskell, are
 covered first.
 
-* GHCi
-  * `:type`
-  * `:info`
-* values
-* type signatures
-  * `x :: T` is read as *x is of the type T*
-* functions are values
-* functions take arguments
-* functions take one argument
-* lambda expressions
-* operators (infix/prefix)
-  * identifiers starting with `isAlpha` are prefix by default, infix surrounded in backticks (\`)
-  * other identifiers are infix by default, prefix surrounded in parentheses
-* data types
-  * `data` keyword
-  * recursive data types
-* pattern matching
-* `deriving` keyword
-* type-classes
-* type parameters
-  * always lower-case 'a'..'z'
-  * aka generics, templates C++, parametric polymorphism
+- GHCi
+  - `:type`
+  - `:info`
+- values
+- type signatures
+  - `x :: T` is read as _x is of the type T_
+- functions are values
+- functions take arguments
+- functions take one argument
+- lambda expressions
+- operators (infix/prefix)
+  - identifiers starting with `isAlpha` are prefix by default, infix surrounded in backticks (\`)
+  - other identifiers are infix by default, prefix surrounded in parentheses
+- data types
+  - `data` keyword
+  - recursive data types
+- pattern matching
+- `deriving` keyword
+- type-classes
+- type parameters
+  - always lower-case 'a'..'z'
+  - aka generics, templates C++, parametric polymorphism
 
 ### Parser grammar assistance
 
 The exercises in `Parser.hs` can be assisted by stating problems in a specific way, with a conversion to code.
 
-| English   | Parser library                    |
-|-----------|-----------------------------------|
-| and then  | `bindParser` `>>=`                |
-| always    | `valueParser` `pure`              |
-| or        | `\|\|\|`                             |
-| 0 or many | `list`                            |
-| 1 or many | `list1`                           |
-| is        | `is`                              |
-| exactly n | `thisMany n`                      |
-| call it x | `\x ->`                           |
+| English   | Parser library       |
+| --------- | -------------------- |
+| and then  | `bindParser` `>>=`   |
+| always    | `valueParser` `pure` |
+| or        | `\|\|\|`             |
+| 0 or many | `list`               |
+| 1 or many | `list1`              |
+| is        | `is`                 |
+| exactly n | `thisMany n`         |
+| call it x | `\x ->`              |
 
 ### Monad comprehension
 
 ##### do-notation
 
-* insert the word `do`
-* turn `>>=` into `<-`
-* delete `->`
-* delete `\`
-* swap each side of `<-`
+- insert the word `do`
+- turn `>>=` into `<-`
+- delete `->`
+- delete `\`
+- swap each side of `<-`
 
 ##### LINQ
 
-* write `from` on each line
-* turn `>>=` into in
-* delete `->`
-* delete `\`
-* swap each side of `in`
-* turn value into `select`
+- write `from` on each line
+- turn `>>=` into in
+- delete `->`
+- delete `\`
+- swap each side of `in`
+- turn value into `select`
 
 ### Demonstrate IO maintains referential transparency
 
@@ -442,32 +445,32 @@ What about these two Clojure programs?
 Sometimes this course material is condensed into one-day. In these cases, the
 following exercises are recommended:
 
-* `Optional`
-  * `mapOptional`
-  * `bindOptional`
-  * `(??)`
-  * `(<+>)`
-* `List`
-  * `headOr`
-  * `product`
-  * `length`
-  * `map`
-  * `filter`
-  * `(++)`
-  * `flatMap`
-  * `reverse`
-* `Functor`
-  * `instance Functor List`
-  * `instance Functor Optional`
-  * `instance Functor ((->) t)`
-  * `instance Functor void`
-* `Applicative`
-  * `instance Applicative List`
-  * `instance Applicative Optional`
-  * `instance Applicative ((->) t)`
-  * `lift2`
-  * `sequence`
-* `FileIO`
+- `Optional`
+  - `mapOptional`
+  - `bindOptional`
+  - `(??)`
+  - `(<+>)`
+- `List`
+  - `headOr`
+  - `product`
+  - `length`
+  - `map`
+  - `filter`
+  - `(++)`
+  - `flatMap`
+  - `reverse`
+- `Functor`
+  - `instance Functor List`
+  - `instance Functor Optional`
+  - `instance Functor ((->) t)`
+  - `instance Functor void`
+- `Applicative`
+  - `instance Applicative List`
+  - `instance Applicative Optional`
+  - `instance Applicative ((->) t)`
+  - `lift2`
+  - `sequence`
+- `FileIO`
 
 ### What about cabal and stack?
 
@@ -486,6 +489,6 @@ repository root.)
 
 ### References
 
-* [The Haskell `error` function](http://hackage.haskell.org/packages/archive/base/latest/doc/html/Prelude.html#v:error)
+- [The Haskell `error` function](http://hackage.haskell.org/packages/archive/base/latest/doc/html/Prelude.html#v:error)
 
-* [Glasgow Haskell Compiler](http://haskell.org/ghc)
+- [Glasgow Haskell Compiler](http://haskell.org/ghc)
