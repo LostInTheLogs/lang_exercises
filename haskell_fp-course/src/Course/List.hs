@@ -753,4 +753,4 @@ tails (x :. xs) = (x :. xs) :. tails xs
 init :: List a -> List a
 init Nil = Nil
 init (_ :. Nil) = Nil
-init (h :. t) = h :. (init t)
+init (h :. t) = h :. init t
