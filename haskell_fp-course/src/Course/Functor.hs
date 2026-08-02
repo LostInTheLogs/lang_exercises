@@ -173,3 +173,7 @@ hi"cba"
 instance Functor IO where
   (<$>) =
     P.fmap
+
+instance Course.Functor.Functor (Either a) where
+  f <$> Left e = Left e
+  f <$> Right x = Right (f x)

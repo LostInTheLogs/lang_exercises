@@ -445,6 +445,10 @@ span ::
 span p x =
   (takeWhile p x, dropWhile p x)
 
+{- | `break` , applied to a predicate  `p`  and a list  `xs` , returns a tuple where
+ first element is longest prefix (possibly empty) of  `xs`  of elements that
+  *do not satisfy*   `p`  and second element is the remainder of the list:
+-}
 break ::
   (a -> Bool) ->
   List a ->
