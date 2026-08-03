@@ -414,4 +414,4 @@ betweenSepbyComma ::
   Char ->
   Parser a ->
   Parser (List a)
-betweenSepbyComma l r a = between (is l) (is r) $ sepby a (is ',' .:. spaces)
+betweenSepbyComma l r a = between (is l) (is r) $ sepby a (commaTok .:. spaces)
