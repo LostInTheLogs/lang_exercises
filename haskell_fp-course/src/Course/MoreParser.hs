@@ -43,13 +43,11 @@ Result >abc< ""
 -}
 spaces ::
   Parser Chars
-spaces =
-  error "todo: Course.MoreParser#spaces"
+spaces = list space
 
 {- | Write a function that applies the given parser, then parses 0 or more spaces,
 then produces the result of the original parser.
 
-/Tip:/ Use the applicative instance or the monad instance.
 
 >>> parse (tok (is 'a')) "a bc"
 Result >bc< 'a'
@@ -60,8 +58,7 @@ Result >bc< 'a'
 tok ::
   Parser a ->
   Parser a
-tok =
-  error "todo: Course.MoreParser#tok"
+tok a = a <* spaces
 
 {- | Write a function that parses the given char followed by 0 or more spaces.
 
@@ -70,14 +67,11 @@ Result >bc< 'a'
 
 >>> isErrorResult (parse (charTok 'a') "dabc")
 True
-
-/Tip:/ Use `tok` and `is`.
 -}
 charTok ::
   Char ->
   Parser Char
-charTok =
-  error "todo: Course.MoreParser#charTok"
+charTok a = is a <* spaces
 
 {- | Write a parser that parses a comma ',' followed by 0 or more spaces.
 
@@ -86,17 +80,13 @@ Result >123< ','
 
 >>> isErrorResult( parse commaTok "1,23")
 True
-
-/Tip:/ Use `charTok`.
 -}
 commaTok ::
   Parser Char
-commaTok =
-  error "todo: Course.MoreParser#commaTok"
+commaTok = charTok ','
 
 {- | Write a parser that parses either a double-quote or a single-quote.
 
-/Tip:/ Use `is` and `|||`
 
 >>> parse quote "'abc"
 Result >abc< '\''
@@ -109,12 +99,9 @@ True
 -}
 quote ::
   Parser Char
-quote =
-  error "todo: Course.MoreParser#quote"
+quote = is '\'' ||| is '"'
 
 {- | Write a function that parses the given string (fails otherwise).
-
-/Tip:/ Use `is` and `traverse`.
 
 >>> parse (string "abc") "abcdef"
 Result >def< "abc"
@@ -125,12 +112,13 @@ True
 string ::
   Chars ->
   Parser Chars
-string =
-  error "todo: Course.MoreParser#string"
+string chars = traverse id $ is <$> chars
+
+-- string Nil = pure Nil
+-- string (a :. r) = is a .:. string r
 
 {- | Write a function that parses the given string, followed by 0 or more spaces.
 
-/Tip:/ Use `tok` and `string`.
 
 >>> parse (stringTok "abc") "abc  "
 Result >< "abc"
@@ -141,12 +129,9 @@ True
 stringTok ::
   Chars ->
   Parser Chars
-stringTok =
-  error "todo: Course.MoreParser#stringTok"
+stringTok s = string s <* spaces
 
 {- | Write a function that tries the given parser, otherwise succeeds by producing the given value.
-
-/Tip:/ Use `|||`.
 
 >>> parse (option 'x' character) "abc"
 Result >bc< 'a'
@@ -158,12 +143,9 @@ option ::
   a ->
   Parser a ->
   Parser a
-option =
-  error "todo: Course.MoreParser#option"
+option a p = p ||| pure a
 
 {- | Write a parser that parses 1 or more digits.
-
-/Tip:/ Use `list1` and `digit`.
 
 >>> parse digits1 "123"
 Result >< "123"
@@ -173,12 +155,9 @@ True
 -}
 digits1 ::
   Parser Chars
-digits1 =
-  error "todo: Course.MoreParser#digits1"
+digits1 = list1 digit
 
 {- | Write a function that parses one of the characters in the given string.
-
-/Tip:/ Use `satisfy` and `elem`.
 
 >>> parse (oneof "abc") "bcdef"
 Result >cdef< 'b'
@@ -189,12 +168,10 @@ True
 oneof ::
   Chars ->
   Parser Char
-oneof =
-  error "todo: Course.MoreParser#oneof"
+oneof elems = satisfy (`elem` elems)
 
 {- | Write a function that parses any character, but fails if it is in the given string.
 
-/Tip:/ Use `satisfy` and `notElem`.
 
 >>> parse (noneof "bcd") "abc"
 Result >bc< 'a'
@@ -205,13 +182,11 @@ True
 noneof ::
   Chars ->
   Parser Char
-noneof =
-  error "todo: Course.MoreParser#noneof"
+noneof elems = satisfy (not . (`elem` elems))
 
 {- | Write a function that applies the first parser, runs the third parser keeping the result,
 then runs the second parser and produces the obtained result.
 
-/Tip:/ Use the applicative instance or the monad instance
 
 >>> parse (between (is '[') (is ']') character) "[a]"
 Result >< 'a'
@@ -230,12 +205,10 @@ between ::
   Parser c ->
   Parser a ->
   Parser a
-between =
-  error "todo: Course.MoreParser#between"
+between l r c = l *> c <* r
 
 {- | Write a function that applies the given parser in between the two given characters.
 
-/Tip:/ Use `between` and `charTok`.
 
 >>> parse (betweenCharTok '[' ']' character) "[a]"
 Result >< 'a'
@@ -254,8 +227,7 @@ betweenCharTok ::
   Char ->
   Parser a ->
   Parser a
-betweenCharTok =
-  error "todo: Course.MoreParser#betweenCharTok"
+betweenCharTok l r = between (is l) (is r)
 
 {- | Write a function that parses 4 hex digits and return the character value.
 
@@ -275,12 +247,15 @@ True
 -}
 hex ::
   Parser Char
-hex =
-  error "todo: Course.MoreParser#hex"
+hex = do
+  x <- thisMany 4 (satisfy isHexDigit)
+  let hex = readHex x
+  case hex of
+    Full num -> pure $ chr num
+    Empty -> unexpectedCharParser '?'
 
 {- | Write a function that parses the character 'u' followed by 4 hex digits and return the character value.
 
-/Tip:/ Use `is` and `hex`.
 
 >>> parse hexu "u0010"
 Result >< '\DLE'
@@ -299,13 +274,10 @@ True
 -}
 hexu ::
   Parser Char
-hexu =
-  error "todo: Course.MoreParser#hexu"
+hexu = is 'u' *> hex
 
 {- | Write a function that produces a non-empty list of values coming off the given parser (which must succeed at least once),
 separated by the second given parser.
-
-/Tip:/ Use `list` and the monad instance.
 
 >>> parse (sepby1 character (is ',')) "a"
 Result >< "a"
@@ -323,13 +295,11 @@ sepby1 ::
   Parser a ->
   Parser s ->
   Parser (List a)
-sepby1 =
-  error "todo: Course.MoreParser#sepby1"
+sepby1 a s = a .:. list (s *> a)
 
 {- | Write a function that produces a list of values coming off the given parser,
 separated by the second given parser.
 
-/Tip:/ Use `sepby1` and `|||`.
 
 >>> parse (sepby character (is ',')) ""
 Result >< ""
@@ -347,8 +317,7 @@ sepby ::
   Parser a ->
   Parser s ->
   Parser (List a)
-sepby =
-  error "todo: Course.MoreParser#sepby"
+sepby a s = sepby1 a s ||| pure Nil
 
 {- | Write a parser that asserts that there is no remaining input.
 
@@ -360,12 +329,13 @@ True
 -}
 eof ::
   Parser ()
-eof =
-  error "todo: Course.MoreParser#eof"
+eof = P parseFun
+ where
+  parseFun Nil = Result Nil ()
+  parseFun _ = UnexpectedEof
 
 {- | Write a parser that produces a character that satisfies all of the given predicates.
 
-/Tip:/ Use `sequence` and @Data.List#and@.
 
 >>> parse (satisfyAll (isUpper :. (/= 'X') :. Nil)) "ABC"
 Result >BC< 'A'
@@ -385,12 +355,12 @@ True
 satisfyAll ::
   List (Char -> Bool) ->
   Parser Char
-satisfyAll =
-  error "todo: Course.MoreParser#satisfyAll"
+satisfyAll p = satisfy (and . sequence p)
+
+-- satisfyAll p = satisfy (\x -> and (p <*> pure x))
+-- satisfyAll p = satisfy (\x -> let r = ($) <$> p <*> pure x in and r)
 
 {- | Write a parser that produces a character that satisfies any of the given predicates.
-
-/Tip:/ Use `sequence` and @Data.List#or@.
 
 >>> parse (satisfyAny (isLower :. (/= 'X') :. Nil)) "abc"
 Result >bc< 'a'
@@ -407,12 +377,10 @@ True
 satisfyAny ::
   List (Char -> Bool) ->
   Parser Char
-satisfyAny =
-  error "todo: Course.MoreParser#satisfyAny"
+satisfyAny p = satisfy (or . sequence p)
 
 {- | Write a parser that parses between the two given characters, separated by a comma character ','.
 
-/Tip:/ Use `betweenCharTok`, `sepby` and `charTok`.
 
 >>> parse (betweenSepbyComma '[' ']' lower) "[a]"
 Result >< "a"
@@ -446,5 +414,4 @@ betweenSepbyComma ::
   Char ->
   Parser a ->
   Parser (List a)
-betweenSepbyComma =
-  error "todo: Course.MoreParser#betweenSepbyComma"
+betweenSepbyComma l r a = between (is l) (is r) $ sepby a (is ',' .:. spaces)
