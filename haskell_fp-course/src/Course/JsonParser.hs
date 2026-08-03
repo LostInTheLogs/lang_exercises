@@ -294,14 +294,13 @@ jsonValue ::
   Parser JsonValue
 jsonValue =
   tok
-    ( (JsonString <$> jsonString)
-        ||| (JsonFalse <$ jsonFalse)
-        ||| (JsonTrue <$ jsonTrue)
-        ||| (JsonNull <$ jsonNull)
-        ||| (JsonRational <$> jsonNumber)
-        ||| (JsonArray <$> jsonArray)
-        ||| (JsonObject <$> jsonObject)
-    )
+    $ (JsonString <$> jsonString)
+    ||| (JsonFalse <$ jsonFalse)
+    ||| (JsonTrue <$ jsonTrue)
+    ||| (JsonNull <$ jsonNull)
+    ||| (JsonRational <$> jsonNumber)
+    ||| (JsonArray <$> jsonArray)
+    ||| (JsonObject <$> jsonObject)
 
 {- | Read a file into a JSON value.
 
