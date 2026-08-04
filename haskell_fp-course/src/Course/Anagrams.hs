@@ -4,6 +4,7 @@
 
 module Course.Anagrams where
 
+import Course.Applicative
 import Course.Core
 import Course.Functor
 import Course.List
@@ -31,8 +32,11 @@ anagrams ::
   Chars ->
   FilePath ->
   IO (List Chars)
-anagrams =
-  error "todo: Course.Anagrams#anagrams"
+anagrams word dictPath = do
+  let perms = permutations word
+  words <- lines <$> readFile dictPath
+  let r = intersectBy equalIgnoringCase words perms
+  pure r
 
 -- Compare two strings for equality, ignoring case
 equalIgnoringCase ::
