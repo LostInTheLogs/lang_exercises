@@ -90,8 +90,11 @@ data Op
 -}
 convertInteractive ::
   IO ()
-convertInteractive =
-  error "todo: Course.Interactive#convertInteractive"
+convertInteractive = do
+  putStrLn "Give me sth to uppsercase:"
+  line <- getLine
+  let up = toUpper <$> line
+  putStrLn up
 
 {- |
 

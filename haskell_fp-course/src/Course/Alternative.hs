@@ -9,6 +9,7 @@ import Course.Applicative
 import Course.Core
 import Course.Functor
 import Course.List
+import Course.Monad
 import Course.Optional
 import Course.Parser
 import qualified Prelude as P (fmap, (>>=))
@@ -61,14 +62,13 @@ Full 3
 instance Alternative Optional where
   zero ::
     Optional a
-  zero =
-    error "todo: Course.Alternative zero#instance Optional"
+  zero = Empty
   (<|>) ::
     Optional a ->
     Optional a ->
     Optional a
-  (<|>) =
-    error "todo: Course.Alternative (<|>)#instance Optional"
+  Empty <|> b = b
+  a <|> _ = a
 
 {- | Append the lists.
 This instance views lists as a non-deterministic choice between elements,
@@ -86,87 +86,79 @@ so the way we "alternate" them is to append the lists.
 instance Alternative List where
   zero ::
     List a
-  zero =
-    error "todo: Course.Alternative zero#instance List"
+  zero = Nil
   (<|>) ::
     List a ->
     List a ->
     List a
-  (<|>) =
-    error "todo: Course.Alternative (<|>)#instance List"
+  Nil <|> b = b
+  a <|> Nil = a
+  a <|> b = a ++ b
 
 {- | Choose the first succeeding parser
 
 /Tip:/ Check Parser.hs
 
->>> parse (character <|> valueParser 'v') ""
+>>> parse (character <|> valueParser 'v') (listh "")
 Result >< 'v'
 
->>> parse (constantParser UnexpectedEof <|> valueParser 'v') ""
+>>> parse (constantParser UnexpectedEof <|> valueParser 'v') (listh "")
 Result >< 'v'
 
->>> parse (character <|> valueParser 'v') "abc"
+>>> parse (character <|> valueParser 'v') (listh "abc")
 Result >bc< 'a'
 
->>> parse (constantParser UnexpectedEof <|> valueParser 'v') "abc"
+>>> parse (constantParser UnexpectedEof <|> valueParser 'v') (listh "abc")
 Result >abc< 'v'
 -}
 instance Alternative Parser where
   zero ::
     Parser a
-  zero =
-    error "todo: Course.Alternative zero#instance Parser"
+  zero = constantParser UnexpectedEof
   (<|>) ::
     Parser a ->
     Parser a ->
     Parser a
-  (<|>) =
-    error "todo: Course.Alternative (<|>)#instance Parser"
+  pa <|> pb = pa ||| pb
 
 {- | Run the provided Alternative action zero or more times, collecting
 a list of the results.
 
-/Tip:/ Use @some@, @pure@ and @(<|>)@.
-
->>> parse (many character) ""
+>>> parse (many character) (listh"")
 Result >< ""
 
->>> parse (many digit) "123abc"
+>>> parse (many digit) (listh"123abc")
 Result >abc< "123"
 
->>> parse (many digit) "abc"
+>>> parse (many digit) (listh"abc")
 Result >abc< ""
 
->>> parse (many character) "abc"
+>>> parse (many character) (listh"abc")
 Result >< "abc"
 
->>> parse (many (character *> valueParser 'v')) "abc"
+>>> parse (many (character *> valueParser 'v')) (listh"abc")
 Result >< "vvv"
 
->>> parse (many (character *> valueParser 'v')) ""
+>>> parse (many (character *> valueParser 'v')) (listh"")
 Result >< ""
 -}
 many :: (Alternative k) => k a -> k (List a)
-many =
-  error "todo: Course.Alternative many"
+many a = some a <|> pure Nil
 
 {- | Run the provided Alternative action one or more times, collecting
 a list of the results.
 
-/Tip:/ Use @(:.)@ and @many@.
-
->>> parse (some (character)) "abc"
+>>> parse (some (character)) (listh"abc")
 Result >< "abc"
 
->>> parse (some (character *> valueParser 'v')) "abc"
+>>> parse (some (character *> valueParser 'v')) (listh"abc")
 Result >< "vvv"
 
->>> isErrorResult (parse (some (character *> valueParser 'v')) "")
+>>> isErrorResult (parse (some (character *> valueParser 'v')) (listh"") )
 True
 -}
 some :: (Alternative k) => k a -> k (List a)
-some =
-  error "todo: Course.Alternative some"
+some a = (:.) <$> a <*> many a
 
 {- | Combine a list of alternatives
 
@@ -182,5 +174,5 @@ some =
 --
 -- /Note:/ In the standard library, this function is called @asum@
 aconcat :: (Alternative k) => List (k a) -> k a
-aconcat =
-  error "todo: Course.Alternative aconcat"
+aconcat Nil = zero
+aconcat (h :. r) = h <|> aconcat r
