@@ -1,0 +1,11 @@
+name: hgit
+version: 0.1.0.0
+
+dependencies:
+  - base == 4.*
+  - haskell-say
+
+executables:
+  hgit:
+    main: Main.hs
+    source-dirs: app
