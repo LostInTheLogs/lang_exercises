@@ -5,7 +5,13 @@ dependencies:
   - base == 4.*
   - haskell-say
 
+library:
+  source-dirs: src
+
 executables:
   hgit:
     main: Main.hs
     source-dirs: app
+    dependencies:
+      - hgit
+      - optparse-applicative

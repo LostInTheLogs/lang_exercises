@@ -9,6 +9,19 @@ version:        0.1.0.0
 license-file:   LICENSE
 build-type:     Simple
 
+library
+  exposed-modules:
+      HGitLib.GitAdd
+      HGitLib.GitInit
+  other-modules:
+      Paths_hgit
+  hs-source-dirs:
+      src
+  build-depends:
+      base ==4.*
+    , haskell-say
+  default-language: Haskell2010
+
 executable hgit
   main-is: Main.hs
   other-modules:
@@ -18,4 +31,6 @@ executable hgit
   build-depends:
       base ==4.*
     , haskell-say
+    , hgit
+    , optparse-applicative
   default-language: Haskell2010
