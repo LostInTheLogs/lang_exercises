@@ -8,6 +8,10 @@ import HGitLib.GitInit
 
 import Control.Monad (join)
 import Options.Applicative
+import System.Exit (exitFailure)
+import System.IO (hPutStrLn, stderr)
+
+-- import System.Directory
 
 -- addParser :: Parser (IO ())
 -- addParser =
@@ -18,6 +22,7 @@ import Options.Applicative
 initParser :: Parser (IO ())
 initParser =
   gitInit <$> do
+    optPath <- argument str (value "." <> metavar "PATH" <> help "Path to repository")
     pure (InitOptions{..})
 
 main :: IO ()
