@@ -1,11 +1,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module HGitLib.GitInit (InitOptions (..), gitInit) where
+module HGit.GitInit (InitOptions (..), gitInit) where
 
 import Control.Exception (throwIO)
 import Control.Monad
-import HGitLib.Repository (Repository (..), repoPath)
-import HGitLib.Utils
+import HGit.Repository (Repository (..), repoPath)
+import HGit.Utils
 import System.Directory
 import System.Exit
 import System.FilePath ((</>))

@@ -3,8 +3,9 @@
 
 module Main (main) where
 
-import HGitLib.GitAdd
-import HGitLib.GitInit
+import HGit.GitAdd
+import HGit.GitHashObject
+import HGit.GitInit
 
 import Control.Monad (join)
 import Options.Applicative
@@ -25,6 +26,14 @@ initParser =
     optPath <- argument str (value "." <> metavar "PATH" <> help "Path to repository")
     pure (InitOptions{..})
 
+hashObjectParser :: Parser (IO ())
+hashObjectParser =
+  gitHashObject <$> do
+    optPath <- argument str (metavar "PATH" <> help "Path to file")
+    optWrite <- switch (short 'w' <> help "Write object to database")
+
+    pure (HashObjectOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -33,7 +42,6 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
 
   parser :: Parser (IO ())
   parser =
-    hsubparser
-      ( command "init" (info initParser (progDesc "Create an empty git repository"))
-      -- <> command "add" (info addParser (progDesc "Add a file to the repository"))
-      )
+    hsubparser $
+      command "init" (info initParser (progDesc "Create an empty git repository"))
+        <> command "hash-object" (info hashObjectParser (progDesc "compute object ID "))

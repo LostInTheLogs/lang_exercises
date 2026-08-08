@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module HGitLib.GitAdd (gitAdd) where
+module HGit.GitAdd (gitAdd) where
 
 data AddOptions = AddOptions {optFile :: String}
 

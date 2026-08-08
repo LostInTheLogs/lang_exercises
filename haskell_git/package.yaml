@@ -6,15 +6,23 @@ dependencies:
   - directory
   - filepath
   - transformers
-
-library:
-  source-dirs: src
-  # dependencies:
+  - bytestring
+  - cryptohash-sha1
+  - base16-bytestring
+  - zlib
+  - optparse-applicative
 
 executables:
   hgit:
     main: Main.hs
     source-dirs: app
-    dependencies:
-      - hgit
-      - optparse-applicative
+
+ghc-options:
+  - -Wall
+  - -fwarn-incomplete-uni-patterns
+  - -fno-warn-unused-binds
+  - -fno-warn-unused-do-bind
+  - -fno-warn-unused-imports
+  - -fno-warn-type-defaults
+  - -ferror-spans
+  - -Werror=missing-fields

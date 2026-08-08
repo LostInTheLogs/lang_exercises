@@ -45,6 +45,7 @@
             })
             hp.hpack
             pkgs.haskellPackages.cabal-install
+            pkgs.zlib
             # pkgs.dap
           ];
         };
