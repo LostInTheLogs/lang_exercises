@@ -21,7 +21,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import Data.Int (Int64)
 import HGit.Repository (Repository, repoPath)
 import HGit.Utils (note)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, emptyPermissions, setOwnerReadable, setOwnerWritable, setPermissions)
 import System.FilePath ((</>))
 
 data ObjType = Blob | Commit | Tree | Tag deriving (Show, Eq)
@@ -73,7 +73,9 @@ makeObject objPayload objType =
 writeObj :: Repository -> Object -> IO ()
 writeObj repo Object{..} = do
   createDirectoryIfMissing False folderPath
-  BSL.writeFile (folderPath </> fileName) compressed -- TODO: write protected regular file
+  let path = folderPath </> fileName
+  BSL.writeFile path compressed
+  setPermissions path $ setOwnerReadable True $ setOwnerWritable True emptyPermissions
  where
   compressed = Zlib.compress objRaw
   (folderName, fileName) = splitAt 2 objHash
