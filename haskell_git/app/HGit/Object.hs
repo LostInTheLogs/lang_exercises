@@ -4,6 +4,7 @@ module HGit.Object (
   writeObj,
   makeObject,
   objHash,
+  strToObjType,
   ObjType (..),
 ) where
 
@@ -42,6 +43,9 @@ strToObjType "tree" = Just Tree
 strToObjType "tag" = Just Tag
 strToObjType _ = Nothing
 
+objectsPath :: Repository -> [FilePath] -> FilePath
+objectsPath repo path = repoPath repo ("objects" : path)
+
 makeObject :: BSL.LazyByteString -> ObjType -> Object
 makeObject contents objType =
   let objSize = BSL.length contents
@@ -52,7 +56,7 @@ makeObject contents objType =
   addHeader len =
     let header =
           B.string8 (objTypeToStr objType)
-            <> B.string8 " "
+            <> B.char8 ' '
             <> B.int64Dec len
             <> B.word8 0
         blob = header <> B.lazyByteString contents
@@ -60,9 +64,17 @@ makeObject contents objType =
 
 writeObj :: Repository -> Object -> IO ()
 writeObj repo Object{..} = do
-  let compressed = Zlib.compress objData
-      (folderName, fileName) = splitAt 2 objHash
-      folderPath = repoPath repo ["objects", folderName]
-
   createDirectoryIfMissing False folderPath
   BSL.writeFile (folderPath </> fileName) compressed
+ where
+  compressed = Zlib.compress objData
+  (folderName, fileName) = splitAt 2 objHash
+  folderPath = objectsPath repo [folderName]
+
+readObj :: Repository -> ObjType -> [Char] -> IO Object
+readObj repo objHash = do
+  objData <- BSL.readFile $ objectsPath repo [folderName, fileName]
+  let objSize = BSL.length objData
+  return Object{..}
+ where
+  (folderName, fileName) = splitAt 2 objHash

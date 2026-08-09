@@ -13,6 +13,7 @@ executable hgit
   main-is: Main.hs
   other-modules:
       HGit.GitAdd
+      HGit.GitCatFile
       HGit.GitHashObject
       HGit.GitInit
       HGit.Object
