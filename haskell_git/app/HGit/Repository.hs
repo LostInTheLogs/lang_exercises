@@ -33,9 +33,11 @@ findRepo' from =
         guard (parent /= here)
         MaybeT (findRepo' parent)
 
+-- | Recursively find repo
 findRepo :: IO (Maybe Repository)
 findRepo = findRepo' "."
 
+-- | Recursively find repo, throw when no repo found
 getRepo :: IO Repository
 getRepo = do
   repo <- findRepo' "."

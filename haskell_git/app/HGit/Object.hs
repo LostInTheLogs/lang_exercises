@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module HGit.Object (
+  findObject,
   writeObj,
   readObj,
   makeObject,
@@ -53,6 +54,10 @@ objectsPath repo path = repoPath repo ("objects" : path)
 
 hashRaw :: BSLC8.ByteString -> String
 hashRaw = BSC8.unpack . Base16.encode . SHA1.hashlazy
+
+-- | get hash from e.g. HEAD
+findObject :: Repository -> String -> IO String
+findObject repo obj = return obj
 
 makeObject :: BSL.LazyByteString -> ObjType -> Object
 makeObject objPayload objType =
