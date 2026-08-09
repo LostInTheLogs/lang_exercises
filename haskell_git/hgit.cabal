@@ -30,6 +30,7 @@ executable hgit
     , cryptohash-sha1
     , directory
     , filepath
+    , mtl
     , optparse-applicative
     , transformers
     , zlib

@@ -5,6 +5,7 @@ dependencies:
   - base == 4.*
   - directory
   - filepath
+  - mtl
   - transformers
   - bytestring
   - cryptohash-sha1

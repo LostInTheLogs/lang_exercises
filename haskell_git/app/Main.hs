@@ -7,15 +7,15 @@ import HGit.GitAdd
 import HGit.GitCatFile
 import HGit.GitHashObject
 import HGit.GitInit
-import HGit.Object
 
 import Control.Monad (join)
+import HGit.Object (ObjType, deserializeObjType)
 import Options.Applicative
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
 objTypeReader :: ReadM ObjType
-objTypeReader = maybeReader $ \str -> maybe Nothing Just (strToObjType str)
+objTypeReader = maybeReader deserializeObjType
 
 -- import System.Directory
 
@@ -57,4 +57,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
     hsubparser $
       command "init" (info initParser (progDesc "Create an empty git repository"))
         <> command "hash-object" (info hashObjectParser (progDesc "compute object ID"))
-        <> command "cat-file" (info hashObjectParser (progDesc "provide contents or details of repository objects"))
+        <> command "cat-file" (info catFileParser (progDesc "provide contents or details of repository objects"))
