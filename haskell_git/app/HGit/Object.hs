@@ -19,17 +19,15 @@ import qualified Crypto.Hash.SHA1 as SHA1
 import qualified Data.Attoparsec.ByteString.Char8 as A8
 import Data.Attoparsec.ByteString.Lazy ((<?>))
 import qualified Data.Attoparsec.ByteString.Lazy as A
-import Data.Bifunctor (first)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import Data.Int (Int64)
 import Data.List (stripPrefix)
 import HGit.Repository (Repository, repoPath)
-import HGit.Utils (fReadBSLine, fReadLine, note)
+import HGit.Utils (fReadBSLine, fReadLine, note, runParserUnsafe)
 import System.Directory (createDirectoryIfMissing, emptyPermissions, setOwnerReadable, setOwnerWritable, setPermissions)
 import System.FilePath ((</>))
 
@@ -118,7 +116,7 @@ objectParser expectedType expectedHash objRaw = do
   _ <- A8.char ' ' <?> "space"
 
   objSize <- A8.decimal <?> "size"
-  _ <- A.word8 0
+  _ <- A.word8 0 <?> "null"
   objPayload <- A.takeLazyByteString <?> "payload"
 
   let actualSize = BSL.length objPayload
@@ -136,7 +134,4 @@ readObj repo expectedType objHash = do
 
   let decomp = Zlib.decompress objRaw
   let parser = objectParser expectedType objHash decomp
-  let res = A.parse parser decomp
-  case A.eitherResult res of
-    Right obj -> return obj
-    Left err -> ioError $ userError $ "readObj: " ++ err
+  return $ runParserUnsafe parser decomp

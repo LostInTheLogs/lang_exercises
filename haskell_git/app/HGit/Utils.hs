@@ -3,11 +3,13 @@ module HGit.Utils (
   note,
   fReadLine,
   fReadBSLine,
+  runParserUnsafe,
 ) where
 
-import qualified Data.Attoparsec.ByteString.Lazy as A
+import qualified Data.Attoparsec.Lazy as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
+import qualified Data.ByteString.Lazy as BSL
 import System.IO (IOMode (ReadMode), hGetLine, withFile)
 
 putStrErrLn :: [Char] -> IO ()
@@ -22,3 +24,10 @@ fReadLine path = withFile path ReadMode hGetLine
 
 fReadBSLine :: FilePath -> IO BS.ByteString
 fReadBSLine path = withFile path ReadMode BSC8.hGetLine
+
+runParserUnsafe :: A.Parser a -> BSL.ByteString -> a
+runParserUnsafe parser input = do
+  let res = A.parse parser input
+  case A.eitherResult res of
+    Right obj -> obj
+    Left err -> error $ "runParser: " ++ err
