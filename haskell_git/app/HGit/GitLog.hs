@@ -3,7 +3,7 @@
 module HGit.GitLog (gitLog, LogOptions (..)) where
 
 import HGit.Commit (parseCommit)
-import HGit.Object (ObjType (Commit), findObject, objPayload, readObj)
+import HGit.Object (ObjType (Commit), findObject, hashToStr, objPayload, readObj, strToHash)
 import HGit.Repository (getRepo)
 
 data LogOptions = LogOptions {optRef :: String}

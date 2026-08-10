@@ -4,6 +4,7 @@ module HGit.Commit (
   parseCommit,
 ) where
 
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as BSC8
@@ -20,19 +21,10 @@ import HGit.Utils (fReadLine)
 -- import System.Directory (createDirectoryIfMissing, emptyPermissions, setOwnerReadable, setOwnerWritable, setPermissions)
 -- import System.FilePath ((</>))
 
-data Author = Author
-  { authorName :: !String
-  , authorEmail :: !String
-  , authorTime :: !BSL.ByteString
-  }
-  deriving (Show, Eq)
-
 data Commit = Commit
-  { commitTree :: !BSL.ByteString
-  , commitParents :: ![BSL.ByteString]
-  , commitAuthor :: !Author
-  , commitCommitter :: !Author
-  , commitMessage :: !BSL.ByteString
+  { commitTree :: !BS.ByteString
+  , commitParents :: ![BS.ByteString]
+  , commitRaw :: !BSL.ByteString -- Raw commit payload for reading author/message later
   }
   deriving (Show, Eq)
 
