@@ -26,7 +26,8 @@ executable hgit
       app
   ghc-options: -Wall -fwarn-incomplete-uni-patterns -fno-warn-unused-binds -fno-warn-unused-do-bind -fno-warn-unused-imports -fno-warn-type-defaults -ferror-spans -Werror=missing-fields
   build-depends:
-      base ==4.*
+      attoparsec
+    , base ==4.*
     , base16-bytestring
     , bytestring
     , cryptohash-sha1

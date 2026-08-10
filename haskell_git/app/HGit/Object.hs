@@ -16,6 +16,9 @@ module HGit.Object (
 import qualified Codec.Compression.Zlib as Zlib
 import Control.Monad (guard, unless, when)
 import qualified Crypto.Hash.SHA1 as SHA1
+import qualified Data.Attoparsec.ByteString.Char8 as A8
+import Data.Attoparsec.ByteString.Lazy ((<?>))
+import qualified Data.Attoparsec.ByteString.Lazy as A
 import Data.Bifunctor (first)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
@@ -60,9 +63,9 @@ instance Show ObjType where
 data Object = Object
   { objType :: !ObjType
   , objSize :: !Int64
-  , objHash :: !BS.ByteString
-  , objPayload :: !BSL.ByteString
-  , objRaw :: !BSL.ByteString
+  , objHash :: !BS.ByteString -- 20 byte hash
+  , objPayload :: !BSL.ByteString -- payload
+  , objRaw :: !BSL.ByteString -- header + payload (uncompressed)
   }
   deriving (Show, Eq)
 
@@ -109,32 +112,31 @@ writeObj repo Object{..} = do
   (folderName, fileName) = splitAt 2 $ hashToStr objHash
   folderPath = objectsPath repo [folderName]
 
-parseObject :: ObjType -> BS.ByteString -> BSL.ByteString -> Either String Object
-parseObject objType objHash compressedObj = do
-  let objRaw = Zlib.decompress compressedObj
-      (header, nullAndPayload) = BSLC8.break (== '\0') objRaw
+objectParser :: ObjType -> BS.ByteString -> BSL.ByteString -> A.Parser Object
+objectParser expectedType expectedHash objRaw = do
+  _ <- A.string (BSC8.pack $ show expectedType) <?> "type"
+  _ <- A8.char ' ' <?> "space"
 
-  (_, objPayload) <- note "Missing null byte after header" $ BSLC8.uncons nullAndPayload
+  objSize <- A8.decimal <?> "size"
+  _ <- A.word8 0
+  objPayload <- A.takeLazyByteString <?> "payload"
 
-  let (typeString, spaceAndSize) = BSLC8.break (== ' ') header
+  let actualSize = BSL.length objPayload
+  when (objSize /= actualSize) $ fail "Object size mismatch"
+  when (expectedHash /= SHA1.hashlazy objRaw) $ fail "Object hash does not match"
 
-  (_, sizeStr) <- note "Missing space after object type" $ BSLC8.uncons spaceAndSize
-
-  let foundType = BSLC8.unpack typeString
-  when (foundType /= show objType) $ Left "Object type doesn't match expected type"
-
-  (objSize, emptyBS) <- note "Invalid object size" $ BSLC8.readInt64 sizeStr
-
-  unless (BSL.null emptyBS) $ Left "Trailing data after object size"
-  when (objSize /= BSL.length objPayload) $ Left "Object size does not match payload length"
-  when (objHash /= SHA1.hashlazy objRaw) $ Left "Object hash does not match"
-
+  let objType = expectedType
+  let objHash = expectedHash
   pure Object{..}
 
 readObj :: Repository -> ObjType -> BS.ByteString -> IO Object
 readObj repo expectedType objHash = do
   let (folderName, fileName) = splitAt 2 $ hashToStr objHash
   objRaw <- BSL.readFile $ objectsPath repo [folderName, fileName]
-  case parseObject expectedType objHash objRaw of
-    Left err -> ioError $ userError err
+
+  let decomp = Zlib.decompress objRaw
+  let parser = objectParser expectedType objHash decomp
+  let res = A.parse parser decomp
+  case A.eitherResult res of
     Right obj -> return obj
+    Left err -> ioError $ userError $ "readObj: " ++ err

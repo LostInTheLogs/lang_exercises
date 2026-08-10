@@ -12,6 +12,7 @@ dependencies:
   - base16-bytestring
   - zlib
   - optparse-applicative
+  - attoparsec
 
 executables:
   hgit:

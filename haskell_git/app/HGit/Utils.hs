@@ -5,6 +5,7 @@ module HGit.Utils (
   fReadBSLine,
 ) where
 
+import qualified Data.Attoparsec.ByteString.Lazy as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
 import System.IO (IOMode (ReadMode), hGetLine, withFile)
