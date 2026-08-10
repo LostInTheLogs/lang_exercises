@@ -7,6 +7,7 @@ import HGit.GitAdd
 import HGit.GitCatFile
 import HGit.GitHashObject
 import HGit.GitInit
+import HGit.GitLog
 
 import Control.Monad (join)
 import HGit.Object (ObjType, deserializeObjType)
@@ -16,14 +17,6 @@ import System.IO (hPutStrLn, stderr)
 
 objTypeReader :: ReadM ObjType
 objTypeReader = maybeReader deserializeObjType
-
--- import System.Directory
-
--- addParser :: Parser (IO ())
--- addParser =
---   runAdd <$> do
---     optFile <- argument str (metavar "FILE" <> help "File path to add")
---     pure (AddOptions{..})
 
 initParser :: Parser (IO ())
 initParser =
@@ -46,6 +39,12 @@ catFileParser =
     optObject <- argument str (metavar "OBJECT")
     pure (CatFileOptions{..})
 
+logParser :: Parser (IO ())
+logParser =
+  gitLog <$> do
+    optRef <- argument str (value "HEAD" <> metavar "REF" <> help "Revision to start with")
+    pure (LogOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -58,3 +57,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
       command "init" (info initParser (progDesc "Create an empty git repository"))
         <> command "hash-object" (info hashObjectParser (progDesc "compute object ID"))
         <> command "cat-file" (info catFileParser (progDesc "provide contents or details of repository objects"))
+        <> command "log" (info logParser (progDesc "show commit log"))

@@ -7,7 +7,7 @@ import qualified Data.ByteString.Lazy as BSL
 import HGit.Object
 import HGit.Repository
 
-data HashObjectOptions = HashObjectOptions {optPath :: FilePath, optWrite :: Bool}
+data HashObjectOptions = HashObjectOptions {optPath :: !FilePath, optWrite :: !Bool}
 
 gitHashObject :: HashObjectOptions -> IO ()
 gitHashObject HashObjectOptions{..} = do

@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module HGit.Object (
@@ -20,12 +21,29 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import Data.Int (Int64)
+import Data.List (stripPrefix)
 import HGit.Repository (Repository, repoPath)
-import HGit.Utils (note)
+import HGit.Utils (fReadLine, note)
 import System.Directory (createDirectoryIfMissing, emptyPermissions, setOwnerReadable, setOwnerWritable, setPermissions)
 import System.FilePath ((</>))
 
-data ObjType = Blob | Commit | Tree | Tag deriving (Show, Eq)
+getHeadHash :: Repository -> IO String
+getHeadHash repo = do
+  refOrHead <- fReadLine $ repoPath repo ["HEAD"]
+  case stripPrefix "ref: " refOrHead of
+    Nothing -> return refOrHead
+    Just ref -> fReadLine $ repoPath repo [ref]
+
+-- | get hash from e.g. HEAD
+findObject :: Repository -> String -> IO String
+findObject repo "HEAD" = getHeadHash repo
+findObject _ obj = return obj
+
+data ObjType = Blob | Commit | Tree | Tag deriving (Eq)
+
+instance Show ObjType where
+  show :: ObjType -> String
+  show = serializeObjType
 
 data Object = Object
   { objType :: !ObjType
@@ -55,10 +73,6 @@ objectsPath repo path = repoPath repo ("objects" : path)
 hashRaw :: BSLC8.ByteString -> String
 hashRaw = BSC8.unpack . Base16.encode . SHA1.hashlazy
 
--- | get hash from e.g. HEAD
-findObject :: Repository -> String -> IO String
-findObject repo obj = return obj
-
 makeObject :: BSL.LazyByteString -> ObjType -> Object
 makeObject objPayload objType =
   let objSize = BSL.length objPayload
@@ -86,8 +100,8 @@ writeObj repo Object{..} = do
   (folderName, fileName) = splitAt 2 objHash
   folderPath = objectsPath repo [folderName]
 
-parseObject :: String -> BSL.ByteString -> Either String Object
-parseObject objHash compressedObj = do
+parseObject :: ObjType -> String -> BSL.ByteString -> Either String Object
+parseObject objType objHash compressedObj = do
   let objRaw = Zlib.decompress compressedObj
       (header, nullAndPayload) = BSLC8.break (== '\0') objRaw
 
@@ -97,7 +111,8 @@ parseObject objHash compressedObj = do
 
   (_, sizeStr) <- note "Missing space after object type" $ BSLC8.uncons spaceAndSize
 
-  objType <- note "Invalid object type" $ deserializeObjType (BSLC8.unpack typeString)
+  let foundType = BSLC8.unpack typeString
+  when (foundType /= show objType) $ Left "Object type doesn't match expected type"
 
   (objSize, emptyBS) <- note "Invalid object size" $ BSLC8.readInt64 sizeStr
 
@@ -107,8 +122,10 @@ parseObject objHash compressedObj = do
 
   pure Object{..}
 
-readObj :: Repository -> String -> IO (Either String Object)
-readObj repo objHash = do
+readObj :: Repository -> ObjType -> String -> IO Object
+readObj repo expectedType objHash = do
   let (folderName, fileName) = splitAt 2 objHash
   objRaw <- BSL.readFile $ objectsPath repo [folderName, fileName]
-  return $ parseObject objHash objRaw
+  case parseObject expectedType objHash objRaw of
+    Left err -> ioError $ userError err
+    Right obj -> return obj
