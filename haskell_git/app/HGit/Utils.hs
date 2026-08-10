@@ -4,6 +4,7 @@ module HGit.Utils (
   fReadLine,
   fReadBSLine,
   runParserUnsafe,
+  throwErr,
 ) where
 
 import qualified Data.Attoparsec.Lazy as A
@@ -30,4 +31,7 @@ runParserUnsafe parser input = do
   let res = A.parse parser input
   case A.eitherResult res of
     Right obj -> obj
-    Left err -> error $ "runParser: " ++ err
+    Left err -> throwErr "runParserUnsafe" err
+
+throwErr :: String -> String -> a
+throwErr who msg = error $ "fatal: " <> who <> ": " <> msg

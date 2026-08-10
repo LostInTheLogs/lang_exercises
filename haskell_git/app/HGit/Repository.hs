@@ -9,6 +9,7 @@ import Control.Applicative ((<|>))
 import Control.Exception (throwIO)
 import Control.Monad (guard)
 import Control.Monad.Trans.Maybe (MaybeT (..), runMaybeT)
+import HGit.Utils (throwErr)
 import System.Directory (canonicalizePath, doesDirectoryExist)
 import System.FilePath
 import System.IO.Error (alreadyExistsErrorType, doesNotExistErrorType, mkIOError)
@@ -42,7 +43,7 @@ getRepo :: IO Repository
 getRepo = do
   repo <- findRepo' "."
   case repo of
-    Nothing -> throwIO $ mkIOError doesNotExistErrorType "getRepo" Nothing (Just ".git")
+    Nothing -> throwErr "getRepo" "Not in a git repository!"
     Just a -> return a
 
 openRepo :: FilePath -> IO (Maybe Repository)
