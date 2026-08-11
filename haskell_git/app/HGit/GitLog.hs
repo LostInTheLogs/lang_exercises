@@ -2,9 +2,10 @@
 
 module HGit.GitLog (gitLog, LogOptions (..)) where
 
-import HGit.Commit (parseCommit)
-import HGit.Object (ObjType (Commit), findObject, hashToStr, objPayload, readObj, strToHash)
-import HGit.Repository (getRepo)
+import qualified Data.ByteString as BS
+import HGit.Commit (Commit (..), parseCommit, readCommit)
+import HGit.Object (ObjType (CommitObj), findObject, hashToStr, objPayload, readObj, strToHash)
+import HGit.Repository (Repository, getRepo)
 
 data LogOptions = LogOptions {optRef :: String}
 
@@ -12,5 +13,12 @@ gitLog :: LogOptions -> IO ()
 gitLog LogOptions{..} = do
   putStrLn "log"
   repo <- getRepo
-  obj <- readObj repo Commit =<< findObject repo optRef
-  putStrLn $ show $ parseCommit $ objPayload obj
+  rootHash <- findObject repo optRef
+  logRec repo [rootHash]
+
+logRec :: Repository -> [BS.ByteString] -> IO ()
+logRec _ [] = return ()
+logRec repo (hash : hashes) = do
+  commit <- readCommit repo hash
+  putStrLn $ hashToStr hash
+  logRec repo (hashes ++ commitParents commit)

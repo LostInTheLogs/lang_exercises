@@ -52,7 +52,7 @@ strToHash hash = do
     Left err -> ioError $ userError err
     Right val -> return val
 
-data ObjType = Blob | Commit | Tree | Tag deriving (Eq)
+data ObjType = BlobObj | CommitObj | TreeObj | TagObj deriving (Eq)
 
 instance Show ObjType where
   show :: ObjType -> String
@@ -68,16 +68,16 @@ data Object = Object
   deriving (Show, Eq)
 
 serializeObjType :: ObjType -> String
-serializeObjType Blob = "blob"
-serializeObjType Commit = "commit"
-serializeObjType Tree = "tree"
-serializeObjType Tag = "tag"
+serializeObjType BlobObj = "blob"
+serializeObjType CommitObj = "commit"
+serializeObjType TreeObj = "tree"
+serializeObjType TagObj = "tag"
 
 deserializeObjType :: String -> Maybe ObjType
-deserializeObjType "blob" = Just Blob
-deserializeObjType "commit" = Just Commit
-deserializeObjType "tree" = Just Tree
-deserializeObjType "tag" = Just Tag
+deserializeObjType "blob" = Just BlobObj
+deserializeObjType "commit" = Just CommitObj
+deserializeObjType "tree" = Just TreeObj
+deserializeObjType "tag" = Just TagObj
 deserializeObjType _ = Nothing
 
 objectsPath :: Repository -> [FilePath] -> FilePath

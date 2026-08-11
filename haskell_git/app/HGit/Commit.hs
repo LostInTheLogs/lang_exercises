@@ -3,6 +3,8 @@
 
 module HGit.Commit (
   parseCommit,
+  readCommit,
+  Commit (..),
 ) where
 
 import Control.Applicative (many)
@@ -16,6 +18,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import Data.List (stripPrefix)
 import GHC.List (uncons)
+import HGit.Object (ObjType (CommitObj), Object (..), readObj)
 import HGit.Repository (Repository, repoPath)
 import HGit.Utils (fReadLine, runParserUnsafe)
 
@@ -26,7 +29,8 @@ import HGit.Utils (fReadLine, runParserUnsafe)
 -- import System.FilePath ((</>))
 
 data Commit = Commit
-  { commitTree :: !BS.ByteString -- 20 byte
+  { commitHash :: !BS.ByteString -- 20 byte
+  , commitTree :: !BS.ByteString -- 20 byte
   , commitParents :: ![BS.ByteString] -- 20 byte
   , commitRestRaw :: !BSL.ByteString
   }
@@ -41,8 +45,8 @@ asciiHashParser = work <?> "ascii hash"
       Left err -> fail err
       Right val -> return val
 
-commitParser :: A.Parser Commit
-commitParser = do
+commitParser :: BS.ByteString -> A.Parser Commit
+commitParser commitHash = do
   _ <- A.string "tree "
   commitTree <- asciiHashParser <* A8.char '\n'
   let parentLineParser = A.string "parent " *> asciiHashParser <* A8.char '\n'
@@ -50,5 +54,10 @@ commitParser = do
   commitRestRaw <- A.takeLazyByteString
   return Commit{..}
 
-parseCommit payload = do
-  runParserUnsafe commitParser payload
+parseCommit hash payload = do
+  runParserUnsafe (commitParser hash) payload
+
+readCommit :: Repository -> BS.ByteString -> IO Commit
+readCommit repo hash = do
+  Object{..} <- readObj repo CommitObj hash
+  return $ parseCommit hash objPayload
