@@ -16,6 +16,7 @@ dependencies:
   - attoparsec-binary
   - vector
   - vector-algorithms
+  - containers
 
 executables:
   hgit:

@@ -31,6 +31,7 @@ executable hgit
     , base ==4.*
     , base16-bytestring
     , bytestring
+    , containers
     , cryptohash-sha1
     , directory
     , filepath
