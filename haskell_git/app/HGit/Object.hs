@@ -16,7 +16,8 @@ module HGit.Object (
 ) where
 
 import qualified Codec.Compression.Zlib as Zlib
-import Control.Applicative (asum, (<|>))
+import Control.Applicative (asum, many, (<|>))
+import qualified Control.Arrow as Arr
 import qualified Control.Exception as E
 import Control.Monad (guard, unless, when)
 import Control.Monad.IO.Class (liftIO)
@@ -41,7 +42,7 @@ import qualified Data.Vector.Algorithms.Search as VSearch
 import Data.Word (Word32, Word64, Word8)
 import Debug.Trace
 import HGit.Repository (Repository, repoPath)
-import HGit.Utils (binarySearch, fReadBSLine, fReadLine, note, runParserUnsafe, throwErr)
+import HGit.Utils (binarySearch, fReadBSLine, fReadLine, note, runParserUnsafe, runParserUnsafe2, throwErr)
 import Options.Applicative (optional)
 import qualified System.Directory as Dir
 import System.FilePath ((</>))
@@ -186,11 +187,11 @@ readPackObj repo expectedType objHash = runMaybeT $ do
   guard packExists
   entries <- liftIO $ Dir.listDirectory packpath
   let packIndexes = [packpath </> f | f <- entries, Path.takeExtension f == ".idx", "pack-" `isPrefixOf` f]
-  let actions = findObjInPack expectedType objHash <$> packIndexes
+  let actions = findObjInPack repo expectedType objHash <$> packIndexes
   asum $ map MaybeT actions
 
-findObjInPack :: ObjType -> BS.ByteString -> FilePath -> IO (Maybe Object)
-findObjInPack expectedType objHash idxPath = runMaybeT $ do
+findObjInPack :: Repository -> ObjType -> BS.ByteString -> FilePath -> IO (Maybe Object)
+findObjInPack repo expectedType objHash idxPath = runMaybeT $ do
   raw <- liftIO $ BSL.readFile idxPath
   let PackIndex{..} = runParserUnsafe packIdxV2Parser raw
 
@@ -204,25 +205,71 @@ findObjInPack expectedType objHash idxPath = runMaybeT $ do
           else fromIntegral rawOffset
 
   let packFile = Path.replaceExtension idxPath ".pack"
-  liftIO $ readPackObjAtOffset expectedType (Right packFile) (fromIntegral offset)
+  liftIO $ IO.withBinaryFile packFile IO.ReadMode $ \h -> do
+    readPackObjAtOffset repo expectedType h (fromIntegral offset)
 
-readPackObjAtOffset :: ObjType -> Either IO.Handle FilePath -> Integer -> IO Object
-readPackObjAtOffset expectedType (Right packFile) offset = do
-  IO.withBinaryFile packFile IO.ReadMode $ \h -> do
-    -- TODO: parse header too
-    IO.hSeek h IO.AbsoluteSeek offset
-    contents <- BSL.hGetContents h
-    let parser = packObjParser expectedType h offset
-    -- force eval while file open
-    obj <- runParserUnsafe parser contents
-    return $! obj
-readPackObjAtOffset expectedType (Left h) offset = do
+{-
+n-byte type and length (3-bit type, (n-1)*7+4-bit length)
+Simple | Data
+
+Simple:
+compressed data
+
+Delta:
+OBJ_REF_DELTA> base object name if
+OBJ_OFS_DELTA> a negative relative offset from the delta object's position in the pack
+compressed delta data
+-}
+readPackObjAtOffset :: Repository -> ObjType -> IO.Handle -> Integer -> IO Object
+readPackObjAtOffset repo expectedType h offset = do
   IO.hSeek h IO.AbsoluteSeek offset
   contents <- BSL.hGetContents h
-  let parser = packObjParser expectedType h offset
-  -- force eval while file open
-  obj <- runParserUnsafe parser contents
-  return $! obj
+
+  let ((poType, poSize), packObjData) = runParserUnsafe2 packObjHeaderParser contents
+
+  case poTypeToObjType poType of
+    -- simple
+    Just objType -> do
+      when (objType /= expectedType) $ throwErr "packObjParser" "Type doesn't match"
+
+      let uncompressed = Zlib.decompress packObjData
+      let obj = makeObject uncompressed objType
+
+      let sizeMismatch = poSize /= objSize obj
+      when sizeMismatch $ throwErr "packObjParser" "Size doesn't match"
+
+      -- let hash = objHash obj
+      -- when (hash /= expectedHash) $ throwErr "packObjParser" $ "Hash doesn't match, got: " <> (BSCL8.unpack (objPayload obj))
+
+      return $! obj
+    -- delta
+    Nothing -> do
+      let (lazyBaseObj, deltaRaw) = getBase poType packObjData
+      let decompressed = Zlib.decompress deltaRaw
+      when (BSL.length decompressed /= poSize) $ throwErr "readPackObjAtOffset" "Delta size doesn't match"
+      let delta = runParserUnsafe deltaParser decompressed
+      -- verivy pdBaseSize
+      base <- lazyBaseObj
+
+      when (pdBaseSize delta /= objSize base) $ throwErr "readPackObjAtOffset" "Base obj size doesn't match"
+
+      let rawObj = applyDeltas (objPayload base) delta
+      let obj = makeObject rawObj expectedType
+
+      when (pdObjSize delta /= objSize obj) $ throwErr "readPackObjAtOffset" "Result obj size doesn't match"
+
+      return obj
+ where
+  getBase :: PackObjType -> BSL.ByteString -> (IO Object, BSL.ByteString)
+  getBase POOfsDelta raw = do
+    let (offsetDelta, rest) = runParserUnsafe2 offsetParser raw
+    let base = readPackObjAtOffset repo expectedType h (offset - offsetDelta)
+    (base, rest)
+  getBase PORefDelta raw = do
+    let (hash, rest) = Arr.first BSL.toStrict $ BSL.splitAt 20 raw
+    let base = readObj repo expectedType hash
+    (base, rest)
+  getBase _ _ = throwErr "packObjParser" "Not a delta obj, programmer error"
 
 data PackIndex = PackIndex
   { idxFanout :: V.Vector Word32
@@ -273,41 +320,55 @@ packIdxV2Parser = do
   _ <- A.endOfInput <?> "eof"
   return PackIndex{..}
 
-packObjParser :: ObjType -> IO.Handle -> Integer -> A.Parser (IO Object)
-packObjParser expectedType h currOffset = do
-  (poType, poSize) <- packObjHeaderParser
+data PackDeltaInstr = PDCopy Int64 Int64 | PBInsert BS.ByteString deriving (Show)
+data PackDelta = PackDelta {pdBaseSize :: Int64, pdObjSize :: Int64, pdInstrs :: [PackDeltaInstr]} deriving (Show)
 
-  case poTypeToObjType poType of
-    Just objType -> do
-      when (objType /= expectedType) $ throwErr "packObjParser" "Type doesn't match"
-
-      compressed <- A.takeLazyByteString
-      let uncompressed = Zlib.decompress compressed
-      let obj = makeObject uncompressed objType
-
-      let sizeMismatch = poSize /= objSize obj
-      when sizeMismatch $ throwErr "packObjParser" "Size doesn't match"
-
-      -- let hash = objHash obj
-      -- when (hash /= expectedHash) $ throwErr "packObjParser" $ "Hash doesn't match, got: " <> (BSCL8.unpack (objPayload obj))
-      return $ pure obj
-    Nothing -> parseDeltaObj poType poSize
+applyDeltas :: BSL.ByteString -> PackDelta -> BSL.ByteString
+applyDeltas base PackDelta{..} = do
+  B.toLazyByteString $ foldl' foldFun mempty pdInstrs
  where
-  parseDeltaObj :: PackObjType -> Int64 -> A.Parser (IO Object)
-  parseDeltaObj POOfsDelta poSize = do
-    offsetDelta <- offsetParser
+  foldFun :: B.Builder -> PackDeltaInstr -> B.Builder
+  foldFun acc instr = case instr of
+    PBInsert bytes -> acc <> B.byteString bytes
+    PDCopy offset len -> do
+      let bytes = BSL.take len (BSL.drop offset base)
+      acc <> B.lazyByteString bytes
 
-    return $ do
-      let offset = currOffset - offsetDelta
-      baseObj <- readPackObjAtOffset expectedType (Left h) offset
-      throwErr "parseDelta" (show (baseObj))
-  parseDeltaObj PORefDelta poSize = throwErr "packObjParser" (show PORefDelta)
-  parseDeltaObj _ _ = throwErr "parseDelta" "Not a delta object, programmer error"
+deltaParser :: A.Parser PackDelta
+deltaParser = do
+  pdBaseSize <- sizeParser
+  pdObjSize <- sizeParser
+  pdInstrs <- many deltaInstrParser
+  return PackDelta{..}
 
-parseDelta = do
-  baseSize <- sizeParser
-  ourSize <- sizeParser
-  return (baseSize, ourSize)
+deltaInstrParser :: A.Parser PackDeltaInstr
+deltaInstrParser = do
+  op <- A.anyWord8
+
+  when (op == 0) $ throwErr "deltaInstrParser" "reserved instr"
+
+  if Bits.testBit op 7
+    then do
+      off0 <- readByteIf (Bits.testBit op 0)
+      off1 <- readByteIf (Bits.testBit op 1)
+      off2 <- readByteIf (Bits.testBit op 2)
+      off3 <- readByteIf (Bits.testBit op 3)
+
+      sz0 <- readByteIf (Bits.testBit op 4)
+      sz1 <- readByteIf (Bits.testBit op 5)
+      sz2 <- readByteIf (Bits.testBit op 6)
+
+      let offset = off0 .|. (off1 `Bits.shiftL` 8) .|. (off2 `Bits.shiftL` 16) .|. (off3 `Bits.shiftL` 24)
+          rawSize = sz0 .|. (sz1 `Bits.shiftL` 8) .|. (sz2 `Bits.shiftL` 16)
+          size = if rawSize == 0 then 0x10000 else rawSize
+      return $ PDCopy (fromIntegral offset) (fromIntegral size)
+    else do
+      rawData <- A.take $ fromIntegral op
+      return $ PBInsert rawData
+ where
+  readByteIf :: Bool -> A.Parser Word32
+  readByteIf True = fromIntegral <$> A.anyWord8
+  readByteIf False = pure 0
 
 offsetParser :: A.Parser Integer
 offsetParser = do

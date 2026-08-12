@@ -4,6 +4,7 @@ module HGit.Utils (
   fReadLine,
   fReadBSLine,
   runParserUnsafe,
+  runParserUnsafe2,
   throwErr,
   binarySearch,
 ) where
@@ -12,6 +13,7 @@ import qualified Data.Attoparsec.Lazy as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.List as List
 import qualified Data.Vector as V
 import System.IO (IOMode (ReadMode), hGetLine, withFile)
 
@@ -34,6 +36,14 @@ runParserUnsafe parser input = do
   case A.eitherResult res of
     Right obj -> obj
     Left err -> throwErr "runParserUnsafe" err
+
+runParserUnsafe2 :: A.Parser a -> BSL.ByteString -> (a, BSL.ByteString)
+runParserUnsafe2 parser input = do
+  let res = A.parse parser input
+  case res of
+    A.Done rest obj -> (obj, rest)
+    A.Fail _ [] msg -> throwErr "runParserUnsafe2" msg
+    A.Fail _ ctx msg -> throwErr "runParserUnsafe2" (List.intercalate " > " ctx ++ ": " ++ msg)
 
 throwErr :: String -> String -> a
 throwErr who msg = error $ "fatal: " <> who <> ": " <> msg
