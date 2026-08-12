@@ -27,6 +27,7 @@ executable hgit
   ghc-options: -Wall -fwarn-incomplete-uni-patterns -fno-warn-unused-binds -fno-warn-unused-do-bind -fno-warn-unused-imports -fno-warn-type-defaults -ferror-spans -Werror=missing-fields
   build-depends:
       attoparsec
+    , attoparsec-binary
     , base ==4.*
     , base16-bytestring
     , bytestring
@@ -36,5 +37,7 @@ executable hgit
     , mtl
     , optparse-applicative
     , transformers
+    , vector
+    , vector-algorithms
     , zlib
   default-language: Haskell2010

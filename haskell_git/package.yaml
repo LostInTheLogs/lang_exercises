@@ -13,6 +13,9 @@ dependencies:
   - zlib
   - optparse-applicative
   - attoparsec
+  - attoparsec-binary
+  - vector
+  - vector-algorithms
 
 executables:
   hgit:

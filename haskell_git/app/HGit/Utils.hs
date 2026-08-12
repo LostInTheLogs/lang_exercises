@@ -5,12 +5,14 @@ module HGit.Utils (
   fReadBSLine,
   runParserUnsafe,
   throwErr,
+  binarySearch,
 ) where
 
 import qualified Data.Attoparsec.Lazy as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Vector as V
 import System.IO (IOMode (ReadMode), hGetLine, withFile)
 
 putStrErrLn :: [Char] -> IO ()
@@ -35,3 +37,19 @@ runParserUnsafe parser input = do
 
 throwErr :: String -> String -> a
 throwErr who msg = error $ "fatal: " <> who <> ": " <> msg
+
+{- | Performs a binary search on a sorted Vector.
+Returns `Just index` if found, or `Nothing` if the target doesn't exist.
+-}
+binarySearch :: (Ord a) => V.Vector a -> a -> Maybe Int
+binarySearch vec target = loop 0 (V.length vec - 1)
+ where
+  loop low high
+    | low > high = Nothing
+    | otherwise =
+        let mid = low + (high - low) `div` 2
+            val = vec V.! mid
+         in case compare target val of
+              LT -> loop low (mid - 1)
+              GT -> loop (mid + 1) high
+              EQ -> Just mid
