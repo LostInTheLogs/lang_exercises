@@ -54,6 +54,7 @@ commitParser commitHash = do
   commitRestRaw <- A.takeLazyByteString
   return Commit{..}
 
+parseCommit :: BSC8.ByteString -> BSLC8.ByteString -> Commit
 parseCommit hash payload = do
   runParserUnsafe (commitParser hash) payload
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -32,11 +33,13 @@ import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Lazy.Char8 as BSCL8
 import Data.Int (Int64)
 import Data.List (foldl', isPrefixOf, stripPrefix)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Search as VSearch
 import Data.Word (Word32, Word64, Word8)
+import Debug.Trace
 import HGit.Repository (Repository, repoPath)
 import HGit.Utils (binarySearch, fReadBSLine, fReadLine, note, runParserUnsafe, throwErr)
 import Options.Applicative (optional)
@@ -201,13 +204,25 @@ findObjInPack expectedType objHash idxPath = runMaybeT $ do
           else fromIntegral rawOffset
 
   let packFile = Path.replaceExtension idxPath ".pack"
-  liftIO $ IO.withBinaryFile packFile IO.ReadMode $ \h -> do
+  liftIO $ readPackObjAtOffset expectedType (Right packFile) (fromIntegral offset)
+
+readPackObjAtOffset :: ObjType -> Either IO.Handle FilePath -> Integer -> IO Object
+readPackObjAtOffset expectedType (Right packFile) offset = do
+  IO.withBinaryFile packFile IO.ReadMode $ \h -> do
     -- TODO: parse header too
-    IO.hSeek h IO.AbsoluteSeek (fromIntegral offset)
+    IO.hSeek h IO.AbsoluteSeek offset
     contents <- BSL.hGetContents h
-    let parser = packObjParser expectedType objHash
+    let parser = packObjParser expectedType h offset
     -- force eval while file open
-    E.evaluate $ runParserUnsafe parser contents
+    obj <- runParserUnsafe parser contents
+    return $! obj
+readPackObjAtOffset expectedType (Left h) offset = do
+  IO.hSeek h IO.AbsoluteSeek offset
+  contents <- BSL.hGetContents h
+  let parser = packObjParser expectedType h offset
+  -- force eval while file open
+  obj <- runParserUnsafe parser contents
+  return $! obj
 
 data PackIndex = PackIndex
   { idxFanout :: V.Vector Word32
@@ -219,14 +234,14 @@ data PackIndex = PackIndex
   }
   deriving (Show)
 
-data PackObjType = POCommit | POTree | POBlob | POTag | POReserved | POOfdDelta | PORefDelta deriving (Show, Eq)
+data PackObjType = POCommit | POTree | POBlob | POTag | POReserved | POOfsDelta | PORefDelta deriving (Show, Eq)
 numToPOType :: (Eq a, Num a) => a -> PackObjType
 numToPOType 1 = POCommit
 numToPOType 2 = POTree
 numToPOType 3 = POBlob
 numToPOType 4 = POTag
 numToPOType 5 = POReserved
-numToPOType 6 = POOfdDelta
+numToPOType 6 = POOfsDelta
 numToPOType 7 = PORefDelta
 numToPOType _ = POReserved
 
@@ -258,8 +273,8 @@ packIdxV2Parser = do
   _ <- A.endOfInput <?> "eof"
   return PackIndex{..}
 
-packObjParser :: ObjType -> BSC8.ByteString -> A.Parser Object
-packObjParser expectedType expectedHash = do
+packObjParser :: ObjType -> IO.Handle -> Integer -> A.Parser (IO Object)
+packObjParser expectedType h currOffset = do
   (poType, poSize) <- packObjHeaderParser
 
   case poTypeToObjType poType of
@@ -270,14 +285,59 @@ packObjParser expectedType expectedHash = do
       let uncompressed = Zlib.decompress compressed
       let obj = makeObject uncompressed objType
 
-      let sizeMismatch = fromIntegral poSize /= objSize obj
+      let sizeMismatch = poSize /= objSize obj
       when sizeMismatch $ throwErr "packObjParser" "Size doesn't match"
 
-      when (objHash obj /= expectedHash) $ throwErr "packObjParser" "Hash doesn't match"
-      return obj
-    Nothing -> throwErr "packObjParser" (show poType)
+      -- let hash = objHash obj
+      -- when (hash /= expectedHash) $ throwErr "packObjParser" $ "Hash doesn't match, got: " <> (BSCL8.unpack (objPayload obj))
+      return $ pure obj
+    Nothing -> parseDeltaObj poType poSize
+ where
+  parseDeltaObj :: PackObjType -> Int64 -> A.Parser (IO Object)
+  parseDeltaObj POOfsDelta poSize = do
+    offsetDelta <- offsetParser
 
-packObjHeaderParser :: A.Parser (PackObjType, Word64)
+    return $ do
+      let offset = currOffset - offsetDelta
+      baseObj <- readPackObjAtOffset expectedType (Left h) offset
+      throwErr "parseDelta" (show (baseObj))
+  parseDeltaObj PORefDelta poSize = throwErr "packObjParser" (show PORefDelta)
+  parseDeltaObj _ _ = throwErr "parseDelta" "Not a delta object, programmer error"
+
+parseDelta = do
+  baseSize <- sizeParser
+  ourSize <- sizeParser
+  return (baseSize, ourSize)
+
+offsetParser :: A.Parser Integer
+offsetParser = do
+  dataBS <- A.takeWhileIncluding (`Bits.testBit` 7)
+  let header = BS.head dataBS
+      restBS = BS.tail dataBS
+      initlen = header .&. 0b01111111
+      offset = BS.foldl' foldFun (fromIntegral initlen) restBS
+  return $ fromIntegral offset
+ where
+  foldFun :: Word64 -> Word8 -> Word64
+  foldFun acc a =
+    let x = fromIntegral $ a .&. 0b01111111
+     in ((acc + 1) `Bits.shiftL` 7) .|. x
+
+sizeParser :: A.Parser Int64
+sizeParser = do
+  headerBS <- A.takeWhileIncluding (`Bits.testBit` 7)
+  let header = BS.head headerBS
+      restBS = BS.tail headerBS
+      initlen = header .&. 0b01111111
+      len = fst $ BS.foldl' foldHeader (fromIntegral initlen, 7) restBS
+  return $ fromIntegral len
+ where
+  foldHeader :: (Word64, Int) -> Word8 -> (Word64, Int)
+  foldHeader (acc, shift) a =
+    let x = fromIntegral $ a .&. 0b01111111
+     in (acc .|. (x `Bits.shiftL` shift), shift + 7)
+
+packObjHeaderParser :: A.Parser (PackObjType, Int64)
 packObjHeaderParser = do
   headerBS <- A.takeWhileIncluding (`Bits.testBit` 7)
   let header = BS.head headerBS
@@ -285,7 +345,7 @@ packObjHeaderParser = do
       packOType = numToPOType $ (header .&. 0b01110000) `Bits.shiftR` 4
       initlen = header .&. 0b00001111
       len = fst $ BS.foldl' foldHeader (fromIntegral initlen, 4) restBS
-  return (packOType, len)
+  return (packOType, fromIntegral len)
  where
   foldHeader :: (Word64, Int) -> Word8 -> (Word64, Int)
   foldHeader (acc, shift) a =
