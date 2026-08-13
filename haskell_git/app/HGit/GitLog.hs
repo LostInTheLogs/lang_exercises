@@ -11,7 +11,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import HGit.Commit (Commit (..), parseCommit, readCommit)
-import HGit.Object (ObjType (CommitObj), findObject, hashToStr, objPayload, readObj, strToHash)
+import HGit.Object (Hash, ObjType (CommitObj), findObject, objPayload, readObj, strToHash)
 import HGit.Repository (Repository, getRepo)
 
 data LogOptions = LogOptions {optRef :: String}
@@ -22,7 +22,7 @@ gitLog LogOptions{..} = do
   rootHash <- findObject repo optRef
   logRec repo [rootHash] Set.empty
 
-logRec :: Repository -> [BS.ByteString] -> Set.Set BS.ByteString -> IO ()
+logRec :: Repository -> [Hash] -> Set.Set Hash -> IO ()
 logRec _ [] _ = return ()
 logRec repo (hash : hashes) seen =
   if Set.member hash seen
@@ -35,7 +35,7 @@ logRec repo (hash : hashes) seen =
 
 oneLine :: Commit -> T.Text
 oneLine Commit{..} = do
-  let hash = T.pack $ take 7 (hashToStr commitHash)
+  let hash = T.pack $ take 7 (show commitHash)
   let msg = TE.decodeUtf8 commitMsg
   let oneLnMsg = T.strip $ T.replace "\n" " " msg
   hash <> " " <> oneLnMsg

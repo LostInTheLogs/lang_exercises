@@ -18,8 +18,10 @@ executable hgit
       HGit.GitHashObject
       HGit.GitInit
       HGit.GitLog
+      HGit.GitLsTree
       HGit.Object
       HGit.Repository
+      HGit.Tree
       HGit.Utils
       Paths_hgit
   hs-source-dirs:

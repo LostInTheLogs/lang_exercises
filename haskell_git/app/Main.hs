@@ -10,6 +10,7 @@ import HGit.GitInit
 import HGit.GitLog
 
 import Control.Monad (join)
+import HGit.GitLsTree (LsTreeOptions (..), gitLsTree)
 import HGit.Object (ObjType, deserializeObjType)
 import Options.Applicative
 import System.Exit (exitFailure)
@@ -45,6 +46,12 @@ logParser =
     optRef <- argument str (value "HEAD" <> metavar "REF" <> help "Revision to start with")
     pure (LogOptions{..})
 
+lsTreeParser :: Parser (IO ())
+lsTreeParser =
+  gitLsTree <$> do
+    optRef <- argument str (metavar "TREE-ISH" <> help "Tree to print")
+    pure (LsTreeOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -58,3 +65,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "hash-object" (info hashObjectParser (progDesc "compute object ID"))
         <> command "cat-file" (info catFileParser (progDesc "provide contents or details of repository objects"))
         <> command "log" (info logParser (progDesc "show commit log"))
+        <> command "ls-tree" (info lsTreeParser (progDesc "list contents of a tree object"))

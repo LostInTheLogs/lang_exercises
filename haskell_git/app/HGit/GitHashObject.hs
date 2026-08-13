@@ -15,4 +15,4 @@ gitHashObject HashObjectOptions{..} = do
   let obj = makeObject contents BlobObj
   repo <- getRepo
   when optWrite $ writeObj repo obj
-  putStrLn $ hashToStr $ objHash obj
+  putStrLn $ show $ objHash obj

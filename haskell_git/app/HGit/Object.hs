@@ -9,8 +9,10 @@ module HGit.Object (
   readObj,
   makeObject,
   deserializeObjType,
-  hashToStr,
   strToHash,
+  byteHashParser,
+  asciiHashParser,
+  Hash (..),
   Object (..),
   ObjType (..),
 ) where
@@ -49,26 +51,42 @@ import System.FilePath ((</>))
 import qualified System.FilePath as Path
 import qualified System.IO as IO
 
-getHeadHash :: Repository -> IO BS.ByteString
+getHeadHash :: Repository -> IO Hash
 getHeadHash repo = do
   refOrHead <- fReadLine $ repoPath repo ["HEAD"]
   case stripPrefix "ref: " refOrHead of
-    Nothing -> strToHash refOrHead
-    Just ref -> strToHash =<< fReadLine (repoPath repo [ref])
+    Nothing -> return $ strToHash refOrHead
+    Just ref -> do strToHash <$> fReadLine (repoPath repo [ref])
 
 -- | get hash from e.g. HEAD
-findObject :: Repository -> String -> IO BS.ByteString
+findObject :: Repository -> String -> IO Hash
 findObject repo "HEAD" = getHeadHash repo
-findObject _ obj = strToHash obj
+findObject _ obj = return $ strToHash obj
 
-hashToStr :: BS.ByteString -> String
-hashToStr = BSC8.unpack . Base16.encode
+newtype Hash = Hash BS.ByteString deriving (Eq, Ord)
 
-strToHash :: String -> IO BS.ByteString
-strToHash hash = do
-  case Base16.decode $ BSC8.pack hash of
-    Left err -> ioError $ userError err
-    Right val -> return val
+hashLazy :: BSL.ByteString -> Hash
+hashLazy = Hash . SHA1.hashlazy
+
+instance Show Hash where
+  show :: Hash -> String
+  show (Hash bs) = BSC8.unpack $ Base16.encode bs
+
+strToHash :: String -> Hash
+strToHash hashStr = do
+  case Base16.decode $ BSC8.pack hashStr of
+    Left err -> throwErr "strToHash" err
+    Right val -> Hash val
+
+byteHashParser :: A.Parser Hash
+byteHashParser = Hash <$> A.take 20
+
+asciiHashParser :: A.Parser Hash
+asciiHashParser = do
+  hash <- A.take 40
+  case Base16.decode hash of
+    Left err -> fail err
+    Right val -> return $ Hash val
 
 data ObjType = BlobObj | CommitObj | TreeObj | TagObj deriving (Eq)
 
@@ -79,7 +97,7 @@ instance Show ObjType where
 data Object = Object
   { objType :: !ObjType
   , objSize :: !Int64 -- payload size
-  , objHash :: !BS.ByteString -- 20 byte hash
+  , objHash :: !Hash
   , objPayload :: !BSL.ByteString -- payload
   , objRaw :: !BSL.ByteString -- header + payload (uncompressed)
   }
@@ -105,7 +123,7 @@ makeObject :: BSL.LazyByteString -> ObjType -> Object
 makeObject objPayload objType =
   let objSize = BSL.length objPayload
       objRaw = addHeader objSize
-      objHash = SHA1.hashlazy objRaw
+      objHash = hashLazy objRaw
    in Object{..}
  where
   addHeader len =
@@ -125,10 +143,10 @@ writeObj repo Object{..} = do
   Dir.setPermissions path $ Dir.setOwnerReadable True $ Dir.setOwnerWritable True Dir.emptyPermissions
  where
   compressed = Zlib.compress objRaw
-  (folderName, fileName) = splitAt 2 $ hashToStr objHash
+  (folderName, fileName) = splitAt 2 $ show objHash
   folderPath = objectsPath repo [folderName]
 
-objectFileParser :: ObjType -> BS.ByteString -> BSL.ByteString -> A.Parser Object
+objectFileParser :: ObjType -> Hash -> BSL.ByteString -> A.Parser Object
 objectFileParser expectedType expectedHash objRaw = do
   _ <- A.string (BSC8.pack $ show expectedType) <?> "type"
   _ <- A8.char ' ' <?> "space"
@@ -139,7 +157,7 @@ objectFileParser expectedType expectedHash objRaw = do
 
   let actualSize = BSL.length objPayload
   when (objSize /= actualSize) $ fail "Object size mismatch"
-  when (expectedHash /= SHA1.hashlazy objRaw) $ fail "Object hash does not match"
+  when (expectedHash /= hashLazy objRaw) $ fail "Object hash does not match"
 
   let objType = expectedType
   let objHash = expectedHash
@@ -159,17 +177,17 @@ Fallback: Scan Individual .idx Files
 
 -}
 
-readObj :: Repository -> ObjType -> BS.ByteString -> IO Object
+readObj :: Repository -> ObjType -> Hash -> IO Object
 readObj repo expectedType objHash = do
   loose <- readLooseObj repo expectedType objHash
   pack <- readPackObj repo expectedType objHash
   let found = loose <|> pack
-  let err = throwErr "readObj" $ "Object '" ++ hashToStr objHash ++ "' not found"
+  let err = throwErr "readObj" $ "Object '" ++ show objHash ++ "' not found"
   maybe err return found
 
-readLooseObj :: Repository -> ObjType -> BS.ByteString -> IO (Maybe Object)
+readLooseObj :: Repository -> ObjType -> Hash -> IO (Maybe Object)
 readLooseObj repo expectedType objHash = runMaybeT $ do
-  let (folderName, fileName) = splitAt 2 $ hashToStr objHash
+  let (folderName, fileName) = splitAt 2 $ show objHash
   let loosePath = objectsPath repo [folderName, fileName]
 
   looseFileExists <- liftIO $ Dir.doesFileExist loosePath
@@ -180,7 +198,7 @@ readLooseObj repo expectedType objHash = runMaybeT $ do
   let parser = objectFileParser expectedType objHash decomp
   pure $ runParserUnsafe parser decomp
 
-readPackObj :: Repository -> ObjType -> BS.ByteString -> IO (Maybe Object)
+readPackObj :: Repository -> ObjType -> Hash -> IO (Maybe Object)
 readPackObj repo expectedType objHash = runMaybeT $ do
   let packpath = objectsPath repo ["pack"]
   packExists <- liftIO $ Dir.doesDirectoryExist packpath
@@ -190,7 +208,7 @@ readPackObj repo expectedType objHash = runMaybeT $ do
   let actions = findObjInPack repo expectedType objHash <$> packIndexes
   asum $ map MaybeT actions
 
-findObjInPack :: Repository -> ObjType -> BS.ByteString -> FilePath -> IO (Maybe Object)
+findObjInPack :: Repository -> ObjType -> Hash -> FilePath -> IO (Maybe Object)
 findObjInPack repo expectedType objHash idxPath = runMaybeT $ do
   raw <- liftIO $ BSL.readFile idxPath
   let PackIndex{..} = runParserUnsafe packIdxV2Parser raw
@@ -266,18 +284,18 @@ readPackObjAtOffset repo expectedType h offset = do
     let base = readPackObjAtOffset repo expectedType h (offset - offsetDelta)
     (base, rest)
   getBase PORefDelta raw = do
-    let (hash, rest) = Arr.first BSL.toStrict $ BSL.splitAt 20 raw
+    let (hash, rest) = Arr.first (Hash . BSL.toStrict) $ BSL.splitAt 20 raw
     let base = readObj repo expectedType hash
     (base, rest)
   getBase _ _ = throwErr "packObjParser" "Not a delta obj, programmer error"
 
 data PackIndex = PackIndex
   { idxFanout :: V.Vector Word32
-  , idxObjectHashes :: V.Vector BS.ByteString
+  , idxObjectHashes :: V.Vector Hash
   , idxOffsets :: V.Vector Word32
   , idxBigOffsets :: V.Vector Word64
-  , idxChecksum :: BS.ByteString
-  , idxPackChecksum :: BS.ByteString
+  , idxChecksum :: Hash
+  , idxPackChecksum :: Hash
   }
   deriving (Show)
 
@@ -308,15 +326,15 @@ packIdxV2Parser = do
   _ <- AB.word32be 2
   idxFanout <- V.replicateM 256 AB.anyWord32be <?> "fanout"
   let count = fromIntegral $ V.last idxFanout
-  idxObjectHashes <- V.replicateM count (A.take 20) <?> "hashes"
+  idxObjectHashes <- V.replicateM count byteHashParser <?> "hashes"
   _ <- A.take (4 * count) <?> "crc"
   idxOffsets <- V.replicateM count AB.anyWord32be <?> "offsets"
 
   let largeOffsetCount = length $ V.filter (`Bits.testBit` 31) idxOffsets
   idxBigOffsets <- V.replicateM largeOffsetCount AB.anyWord64be <?> "large offsets"
 
-  idxPackChecksum <- A.take 20
-  idxChecksum <- A.take 20
+  idxPackChecksum <- byteHashParser
+  idxChecksum <- byteHashParser
   _ <- A.endOfInput <?> "eof"
   return PackIndex{..}
 
