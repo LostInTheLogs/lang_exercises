@@ -50,6 +50,7 @@ lsTreeParser :: Parser (IO ())
 lsTreeParser =
   gitLsTree <$> do
     optRef <- argument str (metavar "TREE-ISH" <> help "Tree to print")
+    optRecurse <- switch (short 'r' <> help "Recursive")
     pure (LsTreeOptions{..})
 
 main :: IO ()
