@@ -1,10 +1,13 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module HGit.Tree (
   readTree,
   treeParser,
+  modeToStr,
   Tree (..),
   TreeItem (..),
+  FileMode (..),
 ) where
 
 import Control.Applicative (many)
@@ -17,12 +20,42 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import Data.List (stripPrefix)
+import qualified Data.String
 import GHC.List (uncons)
 import HGit.Object (Hash, ObjType (TreeObj), Object (..), byteHashParser, readObj)
 import HGit.Repository (Repository, repoPath)
 import HGit.Utils (fReadLine, runParserUnsafe, throwErr)
 
-data TreeItem = TreeItem {tiMode :: BS.ByteString, tiPath :: String, tiHash :: Hash} deriving (Show, Eq)
+data FileMode
+  = ModeFile -- 100644
+  | ModeExecutable -- 100755
+  | ModeSymlink -- 120000
+  | ModeDirectory -- 040000 / 40000
+  | ModeSubmodule -- 160000
+  deriving (Show, Eq)
+
+modeParser :: A.Parser FileMode
+modeParser = do
+  modeStr <- A8.takeTill (== ' ')
+  case modeStr of
+    "100644" -> pure ModeFile
+    "100755" -> pure ModeExecutable
+    "120000" -> pure ModeSymlink
+    "040000" -> pure ModeDirectory
+    "40000" -> pure ModeDirectory
+    "160000" -> pure ModeSubmodule
+    other -> fail $ "Unknown tree object mode: " ++ show other
+
+modeToStr :: (Data.String.IsString a) => FileMode -> a
+modeToStr mode =
+  case mode of
+    ModeFile -> "100644"
+    ModeExecutable -> "100755"
+    ModeSymlink -> "120000"
+    ModeDirectory -> "040000"
+    ModeSubmodule -> "160000"
+
+data TreeItem = TreeItem {tiMode :: FileMode, tiPath :: String, tiHash :: Hash} deriving (Show, Eq)
 data Tree = Tree {treeHash :: Hash, treeItems :: [TreeItem]} deriving (Show, Eq)
 
 -- data TreeItem = TreeItem {tiMode :: BS.ByteString, tiPath :: String, tiHash :: Hash} deriving (Show, Eq)
@@ -35,8 +68,7 @@ treeParser treeHash = do
  where
   lnParser :: A.Parser TreeItem
   lnParser = do
-    tiModeRaw <- A8.takeTill (== ' ') <* A8.char ' '
-    let tiMode = if BS.length tiModeRaw == 5 then BSC8.cons '0' tiModeRaw else tiModeRaw
+    tiMode <- modeParser <* A8.char ' '
 
     toPathRaw <- A8.takeTill (== '\0') <* A8.char '\0'
     let tiPath = BSC8.unpack toPathRaw

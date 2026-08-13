@@ -13,7 +13,7 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import HGit.Object (ObjType (CommitObj), findObject, objPayload, readObj, strToHash)
 import HGit.Repository (Repository, getRepo)
-import HGit.Tree (Tree (..), TreeItem (..), readTree)
+import HGit.Tree (FileMode (..), Tree (..), TreeItem (..), modeToStr, readTree)
 import HGit.Utils (throwErr)
 import System.FilePath (pathSeparator, (</>))
 
@@ -27,17 +27,15 @@ gitLsTree opts@LsTreeOptions{..} = do
   mapM_ (printTreeItem repo opts "") (treeItems tree)
 
 printTreeItem :: Repository -> LsTreeOptions -> FilePath -> TreeItem -> IO ()
-printTreeItem repo opts@LsTreeOptions{..} path item@TreeItem{..} =
-  case BS.take 2 tiMode of
-    "04" ->
-      if optRecurse
-        then
-          printTreeDir repo opts (path </> tiPath) item
-        else printTreeFile repo opts path item
-    "10" -> printTreeFile repo opts path item
-    "12" -> printTreeFile repo opts path item
-    "16" -> throwErr "printTreeItem" "'commit' not implemented"
-    _ -> throwErr "printTreeItem" "bad tree leaf"
+printTreeItem repo opts@LsTreeOptions{..} path item@TreeItem{..} = do
+  let prFile = printTreeFile repo opts path item
+  let prDir = printTreeDir repo opts (path </> tiPath) item
+  case tiMode of
+    ModeFile -> prFile
+    ModeExecutable -> prFile
+    ModeSymlink -> prFile
+    ModeDirectory -> prFile
+    ModeSubmodule -> throwErr "printTreeItem" "'commit' not implemented"
 
 printTreeDir :: Repository -> LsTreeOptions -> FilePath -> TreeItem -> IO ()
 printTreeDir repo opts@LsTreeOptions{} path TreeItem{..} = do
@@ -46,14 +44,14 @@ printTreeDir repo opts@LsTreeOptions{} path TreeItem{..} = do
 
 printTreeFile :: Repository -> LsTreeOptions -> FilePath -> TreeItem -> IO ()
 printTreeFile repo LsTreeOptions{} path TreeItem{..} = do
-  let typeStr = case BS.take 2 tiMode of
-        "04" -> "tree"
-        "10" -> "blob"
-        "12" -> "blob"
-        "16" -> "commit"
-        _ -> throwErr "gitLsTree'" "bad tree leaf"
+  let typeStr = case tiMode of
+        ModeFile -> "blob"
+        ModeExecutable -> "blob"
+        ModeSymlink -> "blob"
+        ModeDirectory -> "tree"
+        ModeSubmodule -> "commit"
 
-  BS.putStr tiMode
+  putStr $ modeToStr tiMode
   putStr " "
   putStr typeStr
   putStr " "
