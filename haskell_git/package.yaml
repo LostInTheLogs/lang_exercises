@@ -17,6 +17,7 @@ dependencies:
   - vector
   - vector-algorithms
   - containers
+  - text
 
 executables:
   hgit:

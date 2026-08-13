@@ -20,7 +20,7 @@ import Data.List (stripPrefix)
 import GHC.List (uncons)
 import HGit.Object (ObjType (CommitObj), Object (..), readObj)
 import HGit.Repository (Repository, repoPath)
-import HGit.Utils (fReadLine, runParserUnsafe)
+import HGit.Utils (fReadLine, runParserUnsafe, throwErr)
 
 -- import Data.Int (Int64)
 -- import HGit.Repository (Repository, repoPath)
@@ -32,7 +32,10 @@ data Commit = Commit
   { commitHash :: !BS.ByteString -- 20 byte
   , commitTree :: !BS.ByteString -- 20 byte
   , commitParents :: ![BS.ByteString] -- 20 byte
-  , commitRestRaw :: !BSL.ByteString
+  , commitAuthor :: !BS.ByteString
+  , commitCommitter :: !BS.ByteString
+  , commitHeaderRest :: !BS.ByteString
+  , commitMsg :: !BS.ByteString
   }
   deriving (Show, Eq)
 
@@ -47,12 +50,29 @@ asciiHashParser = work <?> "ascii hash"
 
 commitParser :: BS.ByteString -> A.Parser Commit
 commitParser commitHash = do
-  _ <- A.string "tree "
-  commitTree <- asciiHashParser <* A8.char '\n'
-  let parentLineParser = A.string "parent " *> asciiHashParser <* A8.char '\n'
-  commitParents <- A.many' parentLineParser
-  commitRestRaw <- A.takeLazyByteString
+  commitTree <- lineParser "tree" asciiHashParser
+
+  commitParents <- A.many' $ lineParser "parent" asciiHashParser
+
+  commitAuthor <- lineParser "author" $ A8.takeTill (== '\n')
+  commitCommitter <- lineParser "committer" $ A8.takeTill (== '\n')
+
+  commitHeaderRest <- restHeaderParser
+  commitMsg <- A.takeByteString
+
   return Commit{..}
+ where
+  lineParser name parser = (A.string name *> A8.char8 ' ' *> parser <* A8.char8 '\n') <?> show name
+
+  restHeaderParser = restHeaderParserRec mempty <?> "restHeader"
+  restHeaderParserRec acc = do
+    isNL <- A.option False (True <$ A8.char8 '\n')
+    if isNL
+      then pure acc
+      else do
+        chunk <- A8.takeTill (== '\n')
+        nl <- A.take 1
+        restHeaderParserRec (acc <> chunk <> nl)
 
 parseCommit :: BSC8.ByteString -> BSLC8.ByteString -> Commit
 parseCommit hash payload = do

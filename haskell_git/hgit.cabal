@@ -37,6 +37,7 @@ executable hgit
     , filepath
     , mtl
     , optparse-applicative
+    , text
     , transformers
     , vector
     , vector-algorithms
