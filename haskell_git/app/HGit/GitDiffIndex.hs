@@ -1,3 +1,5 @@
+module HGit.GitDiffIndex () where
+
 {-
 Case 1: git diff-index --cached <tree> (Tree vs. Index)
 When --cached is passed, Git completely ignores all stat fields in both entries.

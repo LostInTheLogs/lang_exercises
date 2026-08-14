@@ -57,6 +57,7 @@ lsTreeParser =
 lsFilesParser :: Parser (IO ())
 lsFilesParser =
   gitLsFiles <$> do
+    optModified <- switch (short 'm' <> help "show modified only")
     -- optRef <- argument str (metavar "TREE-ISH" <> help "Tree to print")
     -- optRecurse <- switch (short 'r' <> help "Recursive")
     pure (LsFilesOptions{..})

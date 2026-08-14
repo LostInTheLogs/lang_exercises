@@ -4,6 +4,7 @@
 
 module HGit.Index (
   readIndex,
+  isEntryModified,
   Index (..),
   IndexEntry (..),
 ) where
@@ -21,13 +22,14 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.String
 import Data.Word (Word32)
-import HGit.Object (Hash, byteHashParser)
-import HGit.Repository (Repository, repoPath)
+import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, makeObject)
+import HGit.Repository (Repository, repoPath, worktreePath)
 import HGit.Utils (runParserUnsafe, throwErr)
+import qualified System.Posix.Files as Files
 
 data Permissions = PermNorm | PermExec deriving (Show, Eq)
 
-data StatData = StatData
+data FileStat = FileStat
   { statDataModified :: (Word32, Word32)
   , statMDataModified :: (Word32, Word32)
   , statDev :: Word32
@@ -43,7 +45,7 @@ data IndexExtension = IndexExtension {extSig :: BS.ByteString} deriving (Show)
 data EntryObjType = EntryRegularFile | EntrySymlink | EntryGitlink deriving (Show, Eq)
 
 data IndexEntry = IndexEntry
-  { ieStat :: StatData
+  { ieStat :: FileStat
   , ieType :: EntryObjType
   , iePerm :: Permissions
   , ieObjHash :: Hash
@@ -91,7 +93,7 @@ indexEntryParser = do
   iePath <- BSC8.unpack <$> A8.takeTill (== '\0')
   _ <- A.many1 $ A8.char '\0'
 
-  let ieStat = StatData{..}
+  let ieStat = FileStat{..}
   return (IndexEntry{..})
 
 indexParser :: A.Parser Index
@@ -113,6 +115,41 @@ readIndex repo = do
   raw <- BSL.readFile indexFile
   return $ runParserUnsafe indexParser raw
 
--- for git ls-files -m:
--- checks if the file from the entry has changed
--- entryModified :: IndexEntry -> IO Bool
+getStatData :: FilePath -> IO FileStat
+getStatData path = do
+  stat <- Files.getSymbolicLinkStatus path
+  let (ctimeSec, ctimeNsec) = extractTimeParts (Files.statusChangeTimeHiRes stat)
+      (mtimeSec, mtimeNsec) = extractTimeParts (Files.modificationTimeHiRes stat)
+  pure
+    FileStat
+      { statDataModified = (ctimeSec, ctimeNsec)
+      , statMDataModified = (mtimeSec, mtimeNsec)
+      , statDev = fromIntegral (Files.deviceID stat)
+      , statIno = fromIntegral (Files.fileID stat)
+      , statUid = fromIntegral (Files.fileOwner stat)
+      , statGid = fromIntegral (Files.fileGroup stat)
+      , statSize = fromIntegral (Files.fileSize stat)
+      }
+ where
+  extractTimeParts psx =
+    let psxReal = toRational psx
+        sec = floor psxReal :: Integer
+        nsec = floor ((psxReal - fromInteger sec) * 1000000000) :: Integer
+     in (fromIntegral sec, fromIntegral nsec)
+
+getFileHash :: FilePath -> IO Hash
+getFileHash path = do
+  contents <- BSL.readFile path
+  let obj = makeObject contents BlobObj
+  return $ objHash obj
+
+{- | checks if the file from the entry has changed
+for git ls-files -m
+-}
+isEntryModified :: Repository -> IndexEntry -> IO Bool
+isEntryModified repo IndexEntry{..} = do
+  let filePath = worktreePath repo [iePath]
+  stat <- getStatData filePath
+  if ieStat /= stat
+    then (ieObjHash /=) <$> getFileHash filePath
+    else return False

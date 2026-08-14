@@ -15,6 +15,7 @@ executable hgit
       HGit.Commit
       HGit.GitAdd
       HGit.GitCatFile
+      HGit.GitDiffIndex
       HGit.GitHashObject
       HGit.GitInit
       HGit.GitLog
@@ -43,6 +44,7 @@ executable hgit
     , optparse-applicative
     , text
     , transformers
+    , unix
     , vector
     , vector-algorithms
     , zlib
