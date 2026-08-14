@@ -25,6 +25,7 @@ import Data.Word (Word32)
 import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, makeObject)
 import HGit.Repository (Repository, repoPath, worktreePath)
 import HGit.Utils (runParserUnsafe, throwErr)
+import qualified System.Directory as Dir
 import qualified System.Posix.Files as Files
 
 data Permissions = PermNorm | PermExec deriving (Show, Eq)
@@ -149,7 +150,11 @@ for git ls-files -m
 isEntryModified :: Repository -> IndexEntry -> IO Bool
 isEntryModified repo IndexEntry{..} = do
   let filePath = worktreePath repo [iePath]
-  stat <- getStatData filePath
-  if ieStat /= stat
-    then (ieObjHash /=) <$> getFileHash filePath
-    else return False
+  fileExists <- Dir.doesFileExist filePath
+  if fileExists
+    then do
+      stat <- getStatData filePath
+      if ieStat /= stat
+        then (ieObjHash /=) <$> getFileHash filePath
+        else return False
+    else return True
