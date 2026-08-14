@@ -13,7 +13,7 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import HGit.Object (ObjType (CommitObj), findObject, objPayload, readObj, strToHash)
 import HGit.Repository (Repository, getRepo)
-import HGit.Tree (FileMode (..), Tree (..), TreeItem (..), modeToStr, readTree)
+import HGit.Tree (Tree (..), TreeFileMode (..), TreeItem (..), modeToStr, readTree)
 import HGit.Utils (throwErr)
 import System.FilePath (pathSeparator, (</>))
 
@@ -27,15 +27,15 @@ gitLsTree opts@LsTreeOptions{..} = do
   mapM_ (printTreeItem repo opts "") (treeItems tree)
 
 printTreeItem :: Repository -> LsTreeOptions -> FilePath -> TreeItem -> IO ()
-printTreeItem repo opts@LsTreeOptions{..} path item@TreeItem{..} = do
+printTreeItem repo opts@LsTreeOptions{} path item@TreeItem{..} = do
   let prFile = printTreeFile repo opts path item
   let prDir = printTreeDir repo opts (path </> tiPath) item
   case tiMode of
-    ModeFile -> prFile
-    ModeExecutable -> prFile
-    ModeSymlink -> prFile
-    ModeDirectory -> prFile
-    ModeSubmodule -> throwErr "printTreeItem" "'commit' not implemented"
+    TFFile -> prFile
+    TFExecutable -> prFile
+    TFSymlink -> prFile
+    TFDirectory -> prFile
+    TFSubmodule -> throwErr "printTreeItem" "'commit' not implemented"
 
 printTreeDir :: Repository -> LsTreeOptions -> FilePath -> TreeItem -> IO ()
 printTreeDir repo opts@LsTreeOptions{} path TreeItem{..} = do
@@ -43,13 +43,13 @@ printTreeDir repo opts@LsTreeOptions{} path TreeItem{..} = do
   mapM_ (printTreeItem repo opts path) (treeItems tree)
 
 printTreeFile :: Repository -> LsTreeOptions -> FilePath -> TreeItem -> IO ()
-printTreeFile repo LsTreeOptions{} path TreeItem{..} = do
+printTreeFile _ LsTreeOptions{} path TreeItem{..} = do
   let typeStr = case tiMode of
-        ModeFile -> "blob"
-        ModeExecutable -> "blob"
-        ModeSymlink -> "blob"
-        ModeDirectory -> "tree"
-        ModeSubmodule -> "commit"
+        TFFile -> "blob"
+        TFExecutable -> "blob"
+        TFSymlink -> "blob"
+        TFDirectory -> "tree"
+        TFSubmodule -> "commit"
 
   putStr $ modeToStr tiMode
   putStr " "

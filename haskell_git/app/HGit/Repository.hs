@@ -1,6 +1,7 @@
 module HGit.Repository (
   Repository (..),
   repoPath,
+  worktreePath,
   getRepo,
   findRepo,
 ) where
@@ -23,6 +24,9 @@ data Repository = Repository
 -- | Compute path to a file inside .git folder (e.g., repoFile repo ["objects", "4b"])
 repoPath :: Repository -> [FilePath] -> FilePath
 repoPath repo = foldl (</>) (repoGitdir repo)
+
+worktreePath :: Repository -> [FilePath] -> FilePath
+worktreePath repo = foldl (</>) (repoWorktree repo)
 
 findRepo' :: FilePath -> IO (Maybe Repository)
 findRepo' from =

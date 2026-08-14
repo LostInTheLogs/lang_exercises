@@ -4,10 +4,10 @@
 module HGit.Tree (
   readTree,
   treeParser,
-  modeToStr,
   Tree (..),
   TreeItem (..),
-  FileMode (..),
+  TreeFileMode (..),
+  modeToStr,
 ) where
 
 import Control.Applicative (many)
@@ -26,36 +26,36 @@ import HGit.Object (Hash, ObjType (TreeObj), Object (..), byteHashParser, readOb
 import HGit.Repository (Repository, repoPath)
 import HGit.Utils (fReadLine, runParserUnsafe, throwErr)
 
-data FileMode
-  = ModeFile -- 100644
-  | ModeExecutable -- 100755
-  | ModeSymlink -- 120000
-  | ModeDirectory -- 040000 / 40000
-  | ModeSubmodule -- 160000
+data TreeFileMode
+  = TFFile -- 100644
+  | TFExecutable -- 100755
+  | TFSymlink -- 120000
+  | TFDirectory -- 040000 / 40000
+  | TFSubmodule -- 160000
   deriving (Show, Eq)
 
-modeParser :: A.Parser FileMode
+modeParser :: A.Parser TreeFileMode
 modeParser = do
   modeStr <- A8.takeTill (== ' ')
   case modeStr of
-    "100644" -> pure ModeFile
-    "100755" -> pure ModeExecutable
-    "120000" -> pure ModeSymlink
-    "040000" -> pure ModeDirectory
-    "40000" -> pure ModeDirectory
-    "160000" -> pure ModeSubmodule
+    "100644" -> pure TFFile
+    "100755" -> pure TFExecutable
+    "120000" -> pure TFSymlink
+    "040000" -> pure TFDirectory
+    "40000" -> pure TFDirectory
+    "160000" -> pure TFSubmodule
     other -> fail $ "Unknown tree object mode: " ++ show other
 
-modeToStr :: (Data.String.IsString a) => FileMode -> a
+modeToStr :: (Data.String.IsString a) => TreeFileMode -> a
 modeToStr mode =
   case mode of
-    ModeFile -> "100644"
-    ModeExecutable -> "100755"
-    ModeSymlink -> "120000"
-    ModeDirectory -> "040000"
-    ModeSubmodule -> "160000"
+    TFFile -> "100644"
+    TFExecutable -> "100755"
+    TFSymlink -> "120000"
+    TFDirectory -> "040000"
+    TFSubmodule -> "160000"
 
-data TreeItem = TreeItem {tiMode :: FileMode, tiPath :: String, tiHash :: Hash} deriving (Show, Eq)
+data TreeItem = TreeItem {tiMode :: TreeFileMode, tiPath :: String, tiHash :: Hash} deriving (Show, Eq)
 data Tree = Tree {treeHash :: Hash, treeItems :: [TreeItem]} deriving (Show, Eq)
 
 -- data TreeItem = TreeItem {tiMode :: BS.ByteString, tiPath :: String, tiHash :: Hash} deriving (Show, Eq)

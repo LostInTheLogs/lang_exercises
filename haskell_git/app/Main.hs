@@ -8,9 +8,10 @@ import HGit.GitCatFile
 import HGit.GitHashObject
 import HGit.GitInit
 import HGit.GitLog
+import HGit.GitLsFiles
+import HGit.GitLsTree
 
 import Control.Monad (join)
-import HGit.GitLsTree (LsTreeOptions (..), gitLsTree)
 import HGit.Object (ObjType, deserializeObjType)
 import Options.Applicative
 import System.Exit (exitFailure)
@@ -53,6 +54,13 @@ lsTreeParser =
     optRecurse <- switch (short 'r' <> help "Recursive")
     pure (LsTreeOptions{..})
 
+lsFilesParser :: Parser (IO ())
+lsFilesParser =
+  gitLsFiles <$> do
+    -- optRef <- argument str (metavar "TREE-ISH" <> help "Tree to print")
+    -- optRecurse <- switch (short 'r' <> help "Recursive")
+    pure (LsFilesOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -67,3 +75,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "cat-file" (info catFileParser (progDesc "provide contents or details of repository objects"))
         <> command "log" (info logParser (progDesc "show commit log"))
         <> command "ls-tree" (info lsTreeParser (progDesc "list contents of a tree object"))
+        <> command "ls-files" (info lsFilesParser (progDesc "information about files in index/working directory"))

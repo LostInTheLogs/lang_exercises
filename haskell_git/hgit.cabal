@@ -18,7 +18,9 @@ executable hgit
       HGit.GitHashObject
       HGit.GitInit
       HGit.GitLog
+      HGit.GitLsFiles
       HGit.GitLsTree
+      HGit.Index
       HGit.Object
       HGit.Repository
       HGit.Tree
