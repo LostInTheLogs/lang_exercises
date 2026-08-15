@@ -5,6 +5,8 @@
 module HGit.Index (
   readIndex,
   isEntryModified,
+  getEntryHash,
+  getStatData,
   Index (..),
   IndexEntry (..),
   FileMode (..),
@@ -25,7 +27,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.String
 import Data.Word (Word32)
 import Debug.Trace (trace)
-import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, makeObject)
+import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, getFileHash, makeObject)
 import HGit.Repository (Repository, repoPath, worktreePath)
 import HGit.Tree (FileMode (..))
 import HGit.Utils (nameParser, runParserUnsafe, throwErr)
@@ -144,23 +146,24 @@ getStatData path = do
         nsec = floor ((psxReal - fromInteger sec) * 1000000000) :: Integer
      in (fromIntegral sec, fromIntegral nsec)
 
-getFileHash :: FilePath -> IO Hash
-getFileHash path = do
-  contents <- BSL.readFile path
-  let obj = makeObject contents BlobObj
-  return $ objHash obj
-
 {- | checks if the file from the entry has changed
 for git ls-files -m
 -}
 isEntryModified :: Repository -> IndexEntry -> IO Bool
-isEntryModified repo IndexEntry{..} = do
-  let filePath = worktreePath repo [iePath]
+isEntryModified repo entry = do
+  newHash <- getEntryHash repo entry
+  case newHash of
+    Just hash -> return $ hash /= ieObjHash entry
+    Nothing -> return True
+
+getEntryHash :: Repository -> IndexEntry -> IO (Maybe Hash)
+getEntryHash repo entry = do
+  let filePath = worktreePath repo [iePath entry]
   fileExists <- Dir.doesFileExist filePath
   if fileExists
     then do
       stat <- getStatData filePath
-      if ieStat /= stat
-        then (ieObjHash /=) <$> getFileHash filePath
-        else return False
-    else return True
+      if ieStat entry == stat
+        then return $ Just $ ieObjHash entry
+        else do Just <$> getFileHash filePath
+    else return Nothing

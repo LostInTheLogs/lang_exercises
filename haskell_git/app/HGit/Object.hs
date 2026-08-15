@@ -12,6 +12,7 @@ module HGit.Object (
   strToHash,
   byteHashParser,
   asciiHashParser,
+  getFileHash,
   Hash (..),
   Object (..),
   ObjType (..),
@@ -437,3 +438,9 @@ packObjHeaderParser = nameParser "packObjHeaderParser" $ do
   foldHeader (acc, shift) a =
     let x = fromIntegral $ a .&. 0b01111111
      in (acc .|. (x `Bits.shiftL` shift), shift + 7)
+
+getFileHash :: FilePath -> IO Hash
+getFileHash path = do
+  contents <- BSL.readFile path
+  let obj = makeObject contents BlobObj
+  return $ objHash obj
