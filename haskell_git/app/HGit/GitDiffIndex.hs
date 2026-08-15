@@ -19,7 +19,7 @@ import HGit.Index (Index (..), IndexEntry (..), isEntryModified, readIndex)
 import HGit.Object (Hash, ObjType (CommitObj, TreeObj), findObject, objPayload, readObj, strToHash)
 import HGit.ObjectCoerce (findAndCoerceObj)
 import HGit.Repository (Repository, getRepo)
-import HGit.Tree (objToTree)
+import HGit.Tree (Tree, TreeItem, flattenTree, objToTree)
 
 data DiffIndexOptions = DiffIndexOptions {optTree :: String, optCached :: Bool}
 
@@ -28,12 +28,7 @@ gitDiffIndex DiffIndexOptions{..} = do
     repo <- getRepo
     Index{..} <- readIndex repo
     tree <- objToTree <$> findAndCoerceObj repo TreeObj optTree
-    -- entries <-
-    --     if optModified
-    --         then filterM (isEntryModified repo) idxEntries
-    --         else return idxEntries
-    mapM_ lsFile idxEntries
+    flattenedTree <- flattenTree repo tree
+    mapM_ print flattenedTree
 
-lsFile :: IndexEntry -> IO ()
-lsFile IndexEntry{..} = do
-    putStrLn iePath
+-- print flattenedTree
