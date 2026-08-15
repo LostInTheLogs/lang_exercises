@@ -7,12 +7,14 @@ module HGit.Index (
   isEntryModified,
   Index (..),
   IndexEntry (..),
+  FileMode (..),
 ) where
 
 import Control.Applicative (many)
 import Control.Monad (when)
 import qualified Data.Attoparsec.Binary as AB
 import qualified Data.Attoparsec.ByteString.Char8 as A8
+import Data.Attoparsec.ByteString.Lazy ((<?>))
 import qualified Data.Attoparsec.Lazy as A
 import Data.Bits ((.&.))
 import qualified Data.Bits as Bits
@@ -22,13 +24,13 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.String
 import Data.Word (Word32)
+import Debug.Trace (trace)
 import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, makeObject)
 import HGit.Repository (Repository, repoPath, worktreePath)
-import HGit.Utils (runParserUnsafe, throwErr)
+import HGit.Tree (FileMode (..))
+import HGit.Utils (nameParser, runParserUnsafe, throwErr)
 import qualified System.Directory as Dir
 import qualified System.Posix.Files as Files
-
-data Permissions = PermNorm | PermExec deriving (Show, Eq)
 
 data FileStat = FileStat
   { statDataModified :: (Word32, Word32)
@@ -43,12 +45,9 @@ data FileStat = FileStat
 
 data IndexExtension = IndexExtension {extSig :: BS.ByteString} deriving (Show)
 
-data EntryObjType = EntryRegularFile | EntrySymlink | EntryGitlink deriving (Show, Eq)
-
 data IndexEntry = IndexEntry
   { ieStat :: FileStat
-  , ieType :: EntryObjType
-  , iePerm :: Permissions
+  , ieMode :: FileMode
   , ieObjHash :: Hash
   , iePath :: FilePath
   }
@@ -68,37 +67,44 @@ extensionParser = do
   _raw <- A.take (fromIntegral size)
   return IndexExtension{..}
 
+-- https://github.com/git/git/blob/master/Documentation/gitformat-index.adoc#index-entry
 indexEntryParser :: A.Parser IndexEntry
-indexEntryParser = do
-  statDataModified <- (,) <$> AB.anyWord32be <*> AB.anyWord32be
-  statMDataModified <- (,) <$> AB.anyWord32be <*> AB.anyWord32be
-  statDev <- AB.anyWord32be
-  statIno <- AB.anyWord32be
-  _ <- AB.word16be 0
+indexEntryParser = nameParser "indexEntryParser" $ do
+  statDataModified <- ((,) <$> AB.anyWord32be <*> AB.anyWord32be) <?> "mod"
+  statMDataModified <- ((,) <$> AB.anyWord32be <*> AB.anyWord32be) <?> "mmod"
+  statDev <- AB.anyWord32be <?> "dev"
+  statIno <- AB.anyWord32be <?> "ino"
+  _ <- AB.word16be 0 <?> "null"
   packed <- AB.anyWord16be
-  let ieType = case packed `Bits.shiftR` 12 of
-        0b1000 -> EntryRegularFile
-        0b1010 -> EntrySymlink
-        0b1110 -> EntryGitlink
-        _ -> throwErr "indexEntryParser" "unknown type"
-  let iePerm = case packed .&. 0x1FF of
-        0o644 -> PermNorm
-        0o755 -> PermExec
-        _ -> throwErr "indexEntryParser" "unknown perm"
+  let mode = packed `Bits.shiftR` 12
+  let perms = packed .&. 0x1FF
+  let ieMode = case (mode, perms) of
+        (0b1000, 0o644) -> RegularFile
+        (0b1000, 0o755) -> ExecutableFile
+        (0b1010, _) -> Symlink
+        (0b1110, _) -> Gitlink
+        _ -> throwErr "indexEntryParser" "unknown mode"
   statUid <- AB.anyWord32be
   statGid <- AB.anyWord32be
   statSize <- AB.anyWord32be
   ieObjHash <- byteHashParser
   _flags <- AB.anyWord16be
-  -- v3+flags <- AB.anyWord16be
+  -- TODO: v3+flags <- AB.anyWord16be -- if they're there, add to headerlen
+
+  let headerLen = 62
   iePath <- BSC8.unpack <$> A8.takeTill (== '\0')
-  _ <- A.many1 $ A8.char '\0'
+  _ <- A8.char '\0'
+  let bytesRead = headerLen + length iePath + 1
+
+  -- TODO: if v < 4
+  let bytesToAlignment = (8 - bytesRead) `mod` 8
+  _ <- A8.count bytesToAlignment (A8.char '\0')
 
   let ieStat = FileStat{..}
   return (IndexEntry{..})
 
 indexParser :: A.Parser Index
-indexParser = do
+indexParser = nameParser "indexParser" $ do
   _ <- A.string "DIRC"
   idxVersion <- AB.anyWord32be
   when (idxVersion /= 2) $ throwErr "indexParser" "unsupported index version"

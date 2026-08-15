@@ -21,6 +21,7 @@ executable hgit
       HGit.GitLog
       HGit.GitLsFiles
       HGit.GitLsTree
+      HGit.GitStatus
       HGit.Index
       HGit.Object
       HGit.Repository

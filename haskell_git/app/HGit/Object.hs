@@ -43,7 +43,7 @@ import qualified Data.Vector.Algorithms.Search as VSearch
 import Data.Word (Word32, Word64, Word8)
 import Debug.Trace
 import HGit.Repository (Repository, repoPath)
-import HGit.Utils (binarySearch, fReadBSLine, fReadLine, note, runParserUnsafe, runParserUnsafe2, throwErr)
+import HGit.Utils (binarySearch, fReadBSLine, fReadLine, nameParser, note, runParserUnsafe, runParserUnsafe2, throwErr)
 import Options.Applicative (optional)
 import qualified System.Directory as Dir
 import System.FilePath ((</>))
@@ -146,13 +146,13 @@ writeObj repo Object{..} = do
   folderPath = objectsPath repo [folderName]
 
 objectFileParser :: ObjType -> Hash -> BSL.ByteString -> A.Parser Object
-objectFileParser expectedType expectedHash objRaw = do
-  _ <- A.string (BSC8.pack $ show expectedType) <?> "type"
-  _ <- A8.char ' ' <?> "space"
+objectFileParser expectedType expectedHash objRaw = nameParser "objectFileParser" $ do
+  _ <- A.string (BSC8.pack $ show expectedType)
+  _ <- A8.char ' '
 
-  objSize <- A8.decimal <?> "size"
-  _ <- A.word8 0 <?> "null"
-  objPayload <- A.takeLazyByteString <?> "payload"
+  objSize <- A8.decimal
+  _ <- A.word8 0
+  objPayload <- A.takeLazyByteString
 
   let actualSize = BSL.length objPayload
   when (objSize /= actualSize) $ fail "Object size mismatch"
@@ -320,7 +320,7 @@ idxV2Magic :: Word32
 idxV2Magic = 0xff744f63
 
 packIdxV2Parser :: A.Parser PackIndex
-packIdxV2Parser = do
+packIdxV2Parser = nameParser "packIdxV2Parser" $ do
   _ <- AB.word32be idxV2Magic <?> "magic"
   _ <- AB.word32be 2
   idxFanout <- V.replicateM 256 AB.anyWord32be <?> "fanout"
@@ -359,7 +359,7 @@ deltaParser = do
   return PackDelta{..}
 
 deltaInstrParser :: A.Parser PackDeltaInstr
-deltaInstrParser = do
+deltaInstrParser = nameParser "deltaInstrParser" $ do
   op <- A.anyWord8
 
   when (op == 0) $ throwErr "deltaInstrParser" "reserved instr"
@@ -416,7 +416,7 @@ sizeParser = do
      in (acc .|. (x `Bits.shiftL` shift), shift + 7)
 
 packObjHeaderParser :: A.Parser (PackObjType, Int64)
-packObjHeaderParser = do
+packObjHeaderParser = nameParser "packObjHeaderParser" $ do
   headerBS <- A.takeWhileIncluding (`Bits.testBit` 7)
   let header = BS.head headerBS
       restBS = BS.tail headerBS

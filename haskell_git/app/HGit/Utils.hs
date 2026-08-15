@@ -7,8 +7,10 @@ module HGit.Utils (
   runParserUnsafe2,
   throwErr,
   binarySearch,
+  nameParser,
 ) where
 
+import Data.Attoparsec.Lazy ((<?>))
 import qualified Data.Attoparsec.Lazy as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
@@ -63,3 +65,6 @@ binarySearch vec target = loop 0 (V.length vec - 1)
               LT -> loop low (mid - 1)
               GT -> loop (mid + 1) high
               EQ -> Just mid
+
+nameParser :: String -> A.Parser a -> A.Parser a
+nameParser name parser = parser <?> name
