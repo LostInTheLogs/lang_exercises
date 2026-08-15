@@ -3,11 +3,11 @@
 
 module HGit.Tree (
   readTree,
-  treeParser,
+  objToTree,
+  modeToStr,
   Tree (..),
   TreeItem (..),
   FileMode (..),
-  modeToStr,
 ) where
 
 import Control.Applicative (many)
@@ -22,7 +22,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import Data.List (stripPrefix)
 import qualified Data.String
 import GHC.List (uncons)
-import HGit.Object (Hash, ObjType (TreeObj), Object (..), byteHashParser, readObj)
+import HGit.Object (Hash, ObjType (TreeObj), Object (..), byteHashParser, readObj, readObjOfType)
 import HGit.Repository (Repository, repoPath)
 import HGit.Utils (fReadLine, nameParser, runParserUnsafe, throwErr)
 
@@ -76,7 +76,10 @@ treeParser treeHash = nameParser "treeParser" $ do
 
     return TreeItem{..}
 
+objToTree :: Object -> Tree
+objToTree Object{..} = runParserUnsafe (treeParser objHash) objPayload
+
 readTree :: Repository -> Hash -> IO Tree
 readTree repo hash = do
-  Object{..} <- readObj repo TreeObj hash
+  Object{..} <- readObjOfType repo TreeObj hash
   return $ runParserUnsafe (treeParser hash) objPayload

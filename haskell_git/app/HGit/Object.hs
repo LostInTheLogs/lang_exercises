@@ -6,6 +6,7 @@ module HGit.Object (
   findObject,
   writeObj,
   readObj,
+  readObjOfType,
   makeObject,
   deserializeObjType,
   strToHash,
@@ -115,6 +116,13 @@ deserializeObjType "tree" = Just TreeObj
 deserializeObjType "tag" = Just TagObj
 deserializeObjType _ = Nothing
 
+readObjType :: String -> ObjType
+readObjType "blob" = BlobObj
+readObjType "commit" = CommitObj
+readObjType "tree" = TreeObj
+readObjType "tag" = TagObj
+readObjType _ = throwErr "deserializeObjType" "unknown type"
+
 objectsPath :: Repository -> [FilePath] -> FilePath
 objectsPath repo path = repoPath repo ("objects" : path)
 
@@ -145,10 +153,11 @@ writeObj repo Object{..} = do
   (folderName, fileName) = splitAt 2 $ show objHash
   folderPath = objectsPath repo [folderName]
 
-objectFileParser :: ObjType -> Hash -> BSL.ByteString -> A.Parser Object
-objectFileParser expectedType expectedHash objRaw = nameParser "objectFileParser" $ do
-  _ <- A.string (BSC8.pack $ show expectedType)
+objectFileParser :: Hash -> BSL.ByteString -> A.Parser Object
+objectFileParser expectedHash objRaw = nameParser "objectFileParser" $ do
+  typeStr <- A8.takeTill (== ' ')
   _ <- A8.char ' '
+  let objType = readObjType $ BSC8.unpack typeStr
 
   objSize <- A8.decimal
   _ <- A.word8 0
@@ -158,7 +167,6 @@ objectFileParser expectedType expectedHash objRaw = nameParser "objectFileParser
   when (objSize /= actualSize) $ fail "Object size mismatch"
   when (expectedHash /= hashLazy objRaw) $ fail "Object hash does not match"
 
-  let objType = expectedType
   let objHash = expectedHash
   pure Object{..}
 
@@ -176,16 +184,22 @@ Fallback: Scan Individual .idx Files
 
 -}
 
-readObj :: Repository -> ObjType -> Hash -> IO Object
-readObj repo expectedType objHash = do
-  loose <- readLooseObj repo expectedType objHash
-  pack <- readPackObj repo expectedType objHash
+readObj :: Repository -> Hash -> IO Object
+readObj repo objHash = do
+  loose <- readLooseObj repo objHash
+  pack <- readPackObj repo objHash
   let found = loose <|> pack
   let err = throwErr "readObj" $ "Object '" ++ show objHash ++ "' not found"
   maybe err return found
 
-readLooseObj :: Repository -> ObjType -> Hash -> IO (Maybe Object)
-readLooseObj repo expectedType objHash = runMaybeT $ do
+readObjOfType :: Repository -> ObjType -> Hash -> IO Object
+readObjOfType repo expectedType objHash = do
+  obj <- readObj repo objHash
+  when (objType obj /= expectedType) $ throwErr "readObjOfType" "wrong type"
+  return obj
+
+readLooseObj :: Repository -> Hash -> IO (Maybe Object)
+readLooseObj repo objHash = runMaybeT $ do
   let (folderName, fileName) = splitAt 2 $ show objHash
   let loosePath = objectsPath repo [folderName, fileName]
 
@@ -194,21 +208,21 @@ readLooseObj repo expectedType objHash = runMaybeT $ do
 
   objRaw <- liftIO $ BSL.readFile loosePath
   let decomp = Zlib.decompress objRaw
-  let parser = objectFileParser expectedType objHash decomp
+  let parser = objectFileParser objHash decomp
   pure $ runParserUnsafe parser decomp
 
-readPackObj :: Repository -> ObjType -> Hash -> IO (Maybe Object)
-readPackObj repo expectedType objHash = runMaybeT $ do
+readPackObj :: Repository -> Hash -> IO (Maybe Object)
+readPackObj repo objHash = runMaybeT $ do
   let packpath = objectsPath repo ["pack"]
   packExists <- liftIO $ Dir.doesDirectoryExist packpath
   guard packExists
   entries <- liftIO $ Dir.listDirectory packpath
   let packIndexes = [packpath </> f | f <- entries, Path.takeExtension f == ".idx", "pack-" `isPrefixOf` f]
-  let actions = findObjInPack repo expectedType objHash <$> packIndexes
+  let actions = findObjInPack repo objHash <$> packIndexes
   asum $ map MaybeT actions
 
-findObjInPack :: Repository -> ObjType -> Hash -> FilePath -> IO (Maybe Object)
-findObjInPack repo expectedType objHash idxPath = runMaybeT $ do
+findObjInPack :: Repository -> Hash -> FilePath -> IO (Maybe Object)
+findObjInPack repo objHash idxPath = runMaybeT $ do
   raw <- liftIO $ BSL.readFile idxPath
   let PackIndex{..} = runParserUnsafe packIdxV2Parser raw
 
@@ -223,7 +237,7 @@ findObjInPack repo expectedType objHash idxPath = runMaybeT $ do
 
   let packFile = Path.replaceExtension idxPath ".pack"
   liftIO $ IO.withBinaryFile packFile IO.ReadMode $ \h -> do
-    readPackObjAtOffset repo expectedType h (fromIntegral offset)
+    readPackObjAtOffset repo h (fromIntegral offset)
 
 {-
 n-byte type and length (3-bit type, (n-1)*7+4-bit length)
@@ -237,8 +251,8 @@ OBJ_REF_DELTA> base object name if
 OBJ_OFS_DELTA> a negative relative offset from the delta object's position in the pack
 compressed delta data
 -}
-readPackObjAtOffset :: Repository -> ObjType -> IO.Handle -> Integer -> IO Object
-readPackObjAtOffset repo expectedType h offset = do
+readPackObjAtOffset :: Repository -> IO.Handle -> Integer -> IO Object
+readPackObjAtOffset repo h offset = do
   IO.hSeek h IO.AbsoluteSeek offset
   contents <- BSL.hGetContents h
 
@@ -247,16 +261,11 @@ readPackObjAtOffset repo expectedType h offset = do
   case poTypeToObjType poType of
     -- simple
     Just objType -> do
-      when (objType /= expectedType) $ throwErr "packObjParser" "Type doesn't match"
-
       let uncompressed = Zlib.decompress packObjData
       let obj = makeObject uncompressed objType
 
       let sizeMismatch = poSize /= objSize obj
       when sizeMismatch $ throwErr "packObjParser" "Size doesn't match"
-
-      -- let hash = objHash obj
-      -- when (hash /= expectedHash) $ throwErr "packObjParser" $ "Hash doesn't match, got: " <> (BSCL8.unpack (objPayload obj))
 
       return $! obj
     -- delta
@@ -265,13 +274,12 @@ readPackObjAtOffset repo expectedType h offset = do
       let decompressed = Zlib.decompress deltaRaw
       when (BSL.length decompressed /= poSize) $ throwErr "readPackObjAtOffset" "Delta size doesn't match"
       let delta = runParserUnsafe deltaParser decompressed
-      -- verivy pdBaseSize
       base <- lazyBaseObj
 
       when (pdBaseSize delta /= objSize base) $ throwErr "readPackObjAtOffset" "Base obj size doesn't match"
 
       let rawObj = applyDeltas (objPayload base) delta
-      let obj = makeObject rawObj expectedType
+      let obj = makeObject rawObj (objType base)
 
       when (pdObjSize delta /= objSize obj) $ throwErr "readPackObjAtOffset" "Result obj size doesn't match"
 
@@ -280,11 +288,11 @@ readPackObjAtOffset repo expectedType h offset = do
   getBase :: PackObjType -> BSL.ByteString -> (IO Object, BSL.ByteString)
   getBase POOfsDelta raw = do
     let (offsetDelta, rest) = runParserUnsafe2 offsetParser raw
-    let base = readPackObjAtOffset repo expectedType h (offset - offsetDelta)
+    let base = readPackObjAtOffset repo h (offset - offsetDelta)
     (base, rest)
   getBase PORefDelta raw = do
     let (hash, rest) = Arr.first (Hash . BSL.toStrict) $ BSL.splitAt 20 raw
-    let base = readObj repo expectedType hash
+    let base = readObj repo hash
     (base, rest)
   getBase _ _ = throwErr "packObjParser" "Not a delta obj, programmer error"
 

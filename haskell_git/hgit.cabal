@@ -24,6 +24,7 @@ executable hgit
       HGit.GitStatus
       HGit.Index
       HGit.Object
+      HGit.ObjectCoerce
       HGit.Repository
       HGit.Tree
       HGit.Utils

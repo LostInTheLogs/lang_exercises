@@ -10,7 +10,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
-import HGit.Commit (Commit (..), parseCommit, readCommit)
+import HGit.Commit (Commit (..), readCommit)
 import HGit.Object (Hash, ObjType (CommitObj), findObject, objPayload, readObj, strToHash)
 import HGit.Repository (Repository, getRepo)
 

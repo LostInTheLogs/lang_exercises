@@ -5,6 +5,7 @@ module Main (main) where
 
 import HGit.GitAdd
 import HGit.GitCatFile
+import HGit.GitDiffIndex
 import HGit.GitHashObject
 import HGit.GitInit
 import HGit.GitLog
@@ -58,9 +59,14 @@ lsFilesParser :: Parser (IO ())
 lsFilesParser =
   gitLsFiles <$> do
     optModified <- switch (short 'm' <> help "show modified only")
-    -- optRef <- argument str (metavar "TREE-ISH" <> help "Tree to print")
-    -- optRecurse <- switch (short 'r' <> help "Recursive")
     pure (LsFilesOptions{..})
+
+diffIndexParser :: Parser (IO ())
+diffIndexParser =
+  gitDiffIndex <$> do
+    optTree <- argument str (metavar "TREE-ISH" <> help "Tree to print")
+    optCached <- switch (long "cached" <> help "don't consider the work tree at all")
+    pure (DiffIndexOptions{..})
 
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)

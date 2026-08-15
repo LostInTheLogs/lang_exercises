@@ -2,8 +2,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module HGit.Commit (
-  parseCommit,
   readCommit,
+  objToCommit,
   Commit (..),
 ) where
 
@@ -18,7 +18,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import Data.List (stripPrefix)
 import GHC.List (uncons)
-import HGit.Object (Hash, ObjType (CommitObj), Object (..), asciiHashParser, readObj)
+import HGit.Object (Hash, ObjType (CommitObj), Object (..), asciiHashParser, readObj, readObjOfType)
 import HGit.Repository (Repository, repoPath)
 import HGit.Utils (fReadLine, runParserUnsafe, throwErr)
 
@@ -65,11 +65,8 @@ commitParser commitHash = do
         nl <- A.take 1
         restHeaderParserRec (acc <> chunk <> nl)
 
-parseCommit :: Hash -> BSLC8.ByteString -> Commit
-parseCommit hash payload = do
-  runParserUnsafe (commitParser hash) payload
+objToCommit :: Object -> Commit
+objToCommit Object{..} = runParserUnsafe (commitParser objHash) objPayload
 
 readCommit :: Repository -> Hash -> IO Commit
-readCommit repo hash = do
-  Object{..} <- readObj repo CommitObj hash
-  return $ parseCommit hash objPayload
+readCommit repo hash = objToCommit <$> readObjOfType repo CommitObj hash
