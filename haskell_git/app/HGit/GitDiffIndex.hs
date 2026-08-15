@@ -1,20 +1,7 @@
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module HGit.GitDiffIndex (gitDiffIndex, DiffIndexOptions (..)) where
-
-{-
-doesn't compare files not in index
-
-If Path exists in Index but not in Tree → Added (A)
-If Path exists in Tree but not in Index → Deleted (D)
-If Path exists in both (M):
-  --cached : compare Hash from Index and Tree
-  else: index entry unmodified do --cached else hash the file
--}
-
---
 
 import Control.Monad (filterM)
 import Data.Map as Map
@@ -29,18 +16,27 @@ data DiffIndexOptions = DiffIndexOptions {optTree :: String, optCached :: Bool}
 
 data IndexDiff = Added IndexEntry | Deleted (FilePath, TreeItem) | Modified TreeItem IndexEntry deriving (Show)
 
+{-
+doesn't compare files not in index
+
+If Path exists in Index but not in Tree → Added (A)
+If Path exists in Tree but not in Index → Deleted (D)
+If Path exists in both (M):
+  --cached : compare Hash from Index and Tree
+  else: index entry unmodified do --cached else hash the file
+-}
 diffTreeIndex :: Repository -> Map FilePath TreeItem -> [IndexEntry] -> Bool -> IO [IndexDiff]
-diffTreeIndex repo treeMap' idxEntries cached = reverse <$> doDiff treeMap' idxEntries []
+diffTreeIndex repo treeMap' idxEntries cached = work treeMap' idxEntries []
  where
-  doDiff :: Map.Map FilePath TreeItem -> [IndexEntry] -> [IndexDiff] -> IO [IndexDiff]
-  doDiff (Map.null -> True) rest acc = return $ (Added <$> rest) ++ acc
-  doDiff treeMap [] acc = return $ (Deleted <$> Map.toList treeMap) ++ acc
-  doDiff treeMap (entry : rest) acc = do
+  work :: Map.Map FilePath TreeItem -> [IndexEntry] -> [IndexDiff] -> IO [IndexDiff]
+  work (Map.null -> True) rest acc = return $ reverse acc ++ (Added <$> rest)
+  work treeMap [] acc = return $ reverse acc ++ (Deleted <$> Map.toList treeMap)
+  work treeMap (entry : rest) acc = do
     case treeMap Map.!? iePath entry of
       Just treeItem -> do
         let newMap = Map.delete (iePath entry) treeMap
-        doDiff newMap rest =<< handleDiff treeItem entry acc
-      Nothing -> doDiff treeMap rest (Added entry : acc)
+        work newMap rest =<< handleDiff treeItem entry acc
+      Nothing -> work treeMap rest (Added entry : acc)
 
   handleDiff :: TreeItem -> IndexEntry -> [IndexDiff] -> IO [IndexDiff]
   handleDiff treeItem entry acc = do
