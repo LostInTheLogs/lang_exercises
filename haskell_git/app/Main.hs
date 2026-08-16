@@ -11,6 +11,7 @@ import HGit.GitInit
 import HGit.GitLog
 import HGit.GitLsFiles
 import HGit.GitLsTree
+import HGit.GitStatus
 
 import Control.Monad (join)
 import HGit.Object (ObjType, deserializeObjType)
@@ -68,6 +69,11 @@ diffIndexParser =
     optCached <- switch (long "cached" <> help "don't consider the work tree at all")
     pure (DiffIndexOptions{..})
 
+statusParser :: Parser (IO ())
+statusParser =
+  gitStatus <$> do
+    pure (StatusOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -84,3 +90,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "ls-tree" (info lsTreeParser (progDesc "list contents of a tree object"))
         <> command "ls-files" (info lsFilesParser (progDesc "information about files in index/working directory"))
         <> command "diff-index" (info diffIndexParser (progDesc "compare content and mode of blobs between index and repository"))
+        <> command "status" (info statusParser (progDesc "show working-tree status"))

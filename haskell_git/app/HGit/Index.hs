@@ -7,8 +7,10 @@ module HGit.Index (
   isEntryModified,
   getEntryHash,
   getStatData,
+  getEntryStatus,
   Index (..),
   IndexEntry (..),
+  EntryStatus (..),
   FileMode (..),
 ) where
 
@@ -167,3 +169,15 @@ getEntryHash repo entry = do
         then return $ Just $ ieObjHash entry
         else do Just <$> getFileHash filePath
     else return Nothing
+
+data EntryStatus = EntryDeleted | EntryModified deriving (Show)
+
+getEntryStatus :: Repository -> IndexEntry -> IO (Maybe (EntryStatus, IndexEntry))
+getEntryStatus repo entry = do
+  newHash <- getEntryHash repo entry
+  case newHash of
+    Just hash ->
+      if hash == ieObjHash entry
+        then return Nothing
+        else return $ Just (EntryModified, entry)
+    Nothing -> return $ Just (EntryDeleted, entry)

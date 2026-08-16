@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module HGit.GitDiffIndex (gitDiffIndex, DiffIndexOptions (..)) where
+module HGit.GitDiffIndex (gitDiffIndex, DiffIndexOptions (..), IndexTreeDiff (..), diffTreeIndex) where
 
 import Control.Monad (filterM)
 import Data.Map as Map
@@ -14,7 +14,7 @@ import qualified System.Directory as Dir
 
 data DiffIndexOptions = DiffIndexOptions {optTree :: String, optCached :: Bool}
 
-data IndexDiff = Added IndexEntry | Deleted (FilePath, TreeItem) | Modified TreeItem IndexEntry deriving (Show)
+data IndexTreeDiff = ITDAdded IndexEntry | ITDDeleted (FilePath, TreeItem) | ITDModified TreeItem IndexEntry deriving (Show)
 
 {-
 doesn't compare files not in index
@@ -25,38 +25,40 @@ If Path exists in both (M):
   --cached : compare Hash from Index and Tree
   else: index entry unmodified do --cached else hash the file
 -}
-diffTreeIndex :: Repository -> Map FilePath TreeItem -> [IndexEntry] -> Bool -> IO [IndexDiff]
-diffTreeIndex repo treeMap' idxEntries cached = work treeMap' idxEntries []
+diffTreeIndex :: Repository -> Tree -> [IndexEntry] -> Bool -> IO [IndexTreeDiff]
+diffTreeIndex repo tree idxEntries cached = do
+  flattenedTree <- flattenTree repo tree
+  work (Map.fromList flattenedTree) idxEntries []
  where
-  work :: Map.Map FilePath TreeItem -> [IndexEntry] -> [IndexDiff] -> IO [IndexDiff]
-  work (Map.null -> True) rest acc = return $ reverse acc ++ (Added <$> rest)
-  work treeMap [] acc = return $ reverse acc ++ (Deleted <$> Map.toList treeMap)
+  work :: Map.Map FilePath TreeItem -> [IndexEntry] -> [IndexTreeDiff] -> IO [IndexTreeDiff]
+  work (Map.null -> True) rest acc = return $ reverse acc ++ (ITDAdded <$> rest)
+  work treeMap [] acc = return $ reverse acc ++ (ITDDeleted <$> Map.toList treeMap)
   work treeMap (entry : rest) acc = do
     case treeMap Map.!? iePath entry of
       Just treeItem -> do
         let newMap = Map.delete (iePath entry) treeMap
         work newMap rest =<< handleDiff treeItem entry acc
-      Nothing -> work treeMap rest (Added entry : acc)
+      Nothing -> work treeMap rest (ITDAdded entry : acc)
 
-  handleDiff :: TreeItem -> IndexEntry -> [IndexDiff] -> IO [IndexDiff]
+  handleDiff :: TreeItem -> IndexEntry -> [IndexTreeDiff] -> IO [IndexTreeDiff]
   handleDiff treeItem entry acc = do
     newHash <- if cached then return $ Just $ ieObjHash entry else getEntryHash repo entry
     case newHash of
       Just hash ->
         if tiHash treeItem == hash
           then return acc
-          else return $ Modified treeItem entry : acc
-      Nothing -> return $ Deleted (iePath entry, treeItem) : acc
+          else return $ ITDModified treeItem entry : acc
+      Nothing -> return $ ITDDeleted (iePath entry, treeItem) : acc
 
-printDiff :: IndexDiff -> IO ()
+printDiff :: IndexTreeDiff -> IO ()
 printDiff diff = case diff of
-  Added entry -> do
+  ITDAdded entry -> do
     putStr "A     "
     putStrLn $ iePath entry
-  Deleted (path, _item) -> do
+  ITDDeleted (path, _item) -> do
     putStr "D     "
     putStrLn path
-  Modified _item entry -> do
+  ITDModified _item entry -> do
     putStr "M     "
     putStrLn $ iePath entry
 
@@ -64,7 +66,6 @@ gitDiffIndex :: DiffIndexOptions -> IO ()
 gitDiffIndex DiffIndexOptions{..} = do
   repo <- getRepo
   idxEntries <- idxEntries <$> readIndex repo
-  flattenedTree <- flattenTree repo . objToTree =<< findAndCoerceObj repo TreeObj optTree
-  let treeMap = Map.fromList flattenedTree
-  diffs <- diffTreeIndex repo treeMap idxEntries optCached
+  tree <- objToTree <$> findAndCoerceObj repo TreeObj optTree
+  diffs <- diffTreeIndex repo tree idxEntries optCached
   mapM_ printDiff diffs

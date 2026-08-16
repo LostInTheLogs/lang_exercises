@@ -8,6 +8,7 @@ module HGit.Utils (
   throwErr,
   binarySearch,
   nameParser,
+  mapMaybeM,
 ) where
 
 import Data.Attoparsec.Lazy ((<?>))
@@ -16,6 +17,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.List as List
+import Data.Maybe (catMaybes)
 import qualified Data.Vector as V
 import System.IO (IOMode (ReadMode), hGetLine, withFile)
 
@@ -68,3 +70,6 @@ binarySearch vec target = loop 0 (V.length vec - 1)
 
 nameParser :: String -> A.Parser a -> A.Parser a
 nameParser name parser = parser <?> name
+
+mapMaybeM :: (Monad m) => (a -> m (Maybe b)) -> [a] -> m [b]
+mapMaybeM f = fmap catMaybes . mapM f
