@@ -96,11 +96,11 @@ instance Show ObjType where
   show = serializeObjType
 
 data Object = Object
-  { objType :: !ObjType
-  , objSize :: !Int64 -- payload size
-  , objHash :: !Hash
-  , objPayload :: !BSL.ByteString -- payload
-  , objRaw :: !BSL.ByteString -- header + payload (uncompressed)
+  { objType :: ObjType
+  , objSize :: Int64 -- payload size
+  , objHash :: Hash
+  , objPayload :: BSL.ByteString -- payload
+  , objRaw :: BSL.ByteString -- header + payload (uncompressed)
   }
   deriving (Show, Eq)
 
