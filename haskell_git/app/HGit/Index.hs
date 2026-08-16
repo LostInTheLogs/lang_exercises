@@ -10,6 +10,7 @@ module HGit.Index (
   getEntryStatus,
   Index (..),
   IndexEntry (..),
+  IndexEntries,
   EntryStatus (..),
   FileMode (..),
 ) where
@@ -27,6 +28,7 @@ import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.String
+import qualified Data.Vector.Strict as V
 import Data.Word (Word32)
 import Debug.Trace (trace)
 import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, getFileHash, makeObject)
@@ -57,9 +59,11 @@ data IndexEntry = IndexEntry
   }
   deriving (Show, Eq)
 
+type IndexEntries = V.Vector IndexEntry
+
 data Index = Index
   { idxVersion :: Word32
-  , idxEntries :: [IndexEntry]
+  , idxEntries :: IndexEntries
   , idxExtensions :: [IndexExtension]
   }
   deriving (Show)
@@ -113,7 +117,8 @@ indexParser = nameParser "indexParser" $ do
   idxVersion <- AB.anyWord32be
   when (idxVersion /= 2) $ throwErr "indexParser" "unsupported index version"
   len <- AB.anyWord32be
-  idxEntries <- A.count (fromIntegral len) indexEntryParser
+  idxEntries <- V.fromList <$> A.count (fromIntegral len) indexEntryParser
+  -- idxEntries <- V.generateM (fromIntegral len) (const indexEntryParser)
   idxExtensions <- many extensionParser
   _hash <- byteHashParser
   _ <- A.endOfInput

@@ -5,7 +5,8 @@ module HGit.GitDiffIndex (gitDiffIndex, DiffIndexOptions (..), IndexTreeDiff (..
 
 import Control.Monad (filterM)
 import Data.Map as Map
-import HGit.Index (Index (..), IndexEntry (..), getEntryHash, getStatData, isEntryModified, readIndex)
+import qualified Data.Vector.Strict as V
+import HGit.Index (Index (..), IndexEntries, IndexEntry (..), getEntryHash, getStatData, isEntryModified, readIndex)
 import HGit.Object (Hash, ObjType (CommitObj, TreeObj), findObject, getFileHash, objPayload, readObj, strToHash)
 import HGit.ObjectCoerce (findAndCoerceObj)
 import HGit.Repository (Repository, getRepo, worktreePath)
@@ -25,20 +26,26 @@ If Path exists in both (M):
   --cached : compare Hash from Index and Tree
   else: index entry unmodified do --cached else hash the file
 -}
-diffTreeIndex :: Repository -> Tree -> [IndexEntry] -> Bool -> IO [IndexTreeDiff]
+diffTreeIndex :: Repository -> Tree -> IndexEntries -> Bool -> IO [IndexTreeDiff]
 diffTreeIndex repo tree idxEntries cached = do
   flattenedTree <- flattenTree repo tree
-  work (Map.fromList flattenedTree) idxEntries []
+  work (Map.fromList flattenedTree) 0 []
  where
-  work :: Map.Map FilePath TreeItem -> [IndexEntry] -> [IndexTreeDiff] -> IO [IndexTreeDiff]
-  work (Map.null -> True) rest acc = return $ reverse acc ++ (ITDAdded <$> rest)
-  work treeMap [] acc = return $ reverse acc ++ (ITDDeleted <$> Map.toList treeMap)
-  work treeMap (entry : rest) acc = do
-    case treeMap Map.!? iePath entry of
-      Just treeItem -> do
-        let newMap = Map.delete (iePath entry) treeMap
-        work newMap rest =<< handleDiff treeItem entry acc
-      Nothing -> work treeMap rest (ITDAdded entry : acc)
+  work :: Map.Map FilePath TreeItem -> Int -> [IndexTreeDiff] -> IO [IndexTreeDiff]
+  work treeMap idx acc
+    | Map.null treeMap =
+        let rest = V.drop idx idxEntries
+         in return $ reverse acc ++ V.toList (ITDAdded <$> rest)
+    | idx >= V.length idxEntries =
+        return $ reverse acc ++ (ITDDeleted <$> Map.toList treeMap)
+    | otherwise = do
+        let entry = idxEntries V.! idx
+        case treeMap Map.!? iePath entry of
+          Just treeItem -> do
+            let newMap = Map.delete (iePath entry) treeMap
+            work newMap (idx + 1) =<< handleDiff treeItem entry acc
+          Nothing ->
+            work treeMap (idx + 1) (ITDAdded entry : acc)
 
   handleDiff :: TreeItem -> IndexEntry -> [IndexTreeDiff] -> IO [IndexTreeDiff]
   handleDiff treeItem entry acc = do

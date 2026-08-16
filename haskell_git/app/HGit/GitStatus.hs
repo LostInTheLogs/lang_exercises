@@ -4,18 +4,18 @@ module HGit.GitStatus (StatusOptions (..), gitStatus) where
 
 import Control.Monad (filterM, unless, when)
 import Data.List (stripPrefix)
-import qualified Data.Map as Map
+import qualified Data.Vector.Strict as V
 import HGit.GitDiffIndex (IndexTreeDiff (..), diffTreeIndex)
-import HGit.Index (EntryStatus (..), IndexEntry (..), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)
+import HGit.Index (EntryStatus (..), IndexEntries, IndexEntry (..), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)
 import HGit.Object (ObjType (..))
 import HGit.ObjectCoerce (findAndCoerceObj)
 import HGit.Repository (Repository, getRepo, repoPath)
-import HGit.Tree (flattenTree, objToTree)
-import HGit.Utils (fReadLine, mapMaybeM)
+import HGit.Tree (objToTree)
+import HGit.Utils (fReadLine)
 
 data StatusOptions = StatusOptions {}
 
-getStagedChanges :: Repository -> [IndexEntry] -> IO [IndexTreeDiff]
+getStagedChanges :: Repository -> IndexEntries -> IO [IndexTreeDiff]
 getStagedChanges repo idxEntries = do
   tree <- objToTree <$> findAndCoerceObj repo TreeObj "HEAD"
   diffTreeIndex repo tree idxEntries True
@@ -35,7 +35,7 @@ gitStatus StatusOptions{} = do
     mapM_ printStaged staged
     putStrLn ""
 
-  unstaged <- mapMaybeM (getEntryStatus repo) idxEntries
+  unstaged <- V.mapMaybeM (getEntryStatus repo) idxEntries
   unless (null unstaged) $ do
     putStrLn "Changes not staged for commit:"
     putStrLn "  (use \"git add <file>...\" to update what will be committed)"

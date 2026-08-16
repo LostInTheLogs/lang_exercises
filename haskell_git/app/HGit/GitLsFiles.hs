@@ -3,6 +3,7 @@
 module HGit.GitLsFiles (gitLsFiles, LsFilesOptions (..)) where
 
 import Control.Monad (filterM)
+import qualified Data.Vector.Strict as V
 import HGit.Index (Index (..), IndexEntry (..), isEntryModified, readIndex)
 import HGit.Object (Hash, ObjType (CommitObj), findObject, objPayload, readObj, strToHash)
 import HGit.Repository (Repository, getRepo)
@@ -15,7 +16,7 @@ gitLsFiles LsFilesOptions{..} = do
   Index{..} <- readIndex repo
   entries <-
     if optModified
-      then filterM (isEntryModified repo) idxEntries
+      then V.filterM (isEntryModified repo) idxEntries
       else return idxEntries
   mapM_ lsFile entries
 

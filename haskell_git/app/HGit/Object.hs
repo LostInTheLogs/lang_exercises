@@ -40,8 +40,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSCL8
 import Data.Int (Int64)
 import Data.List (foldl', isPrefixOf, stripPrefix)
-import qualified Data.Vector as V
-import qualified Data.Vector.Algorithms.Search as VSearch
+import qualified Data.Vector.Strict as V
 import Data.Word (Word32, Word64, Word8)
 import Debug.Trace
 import HGit.Repository (Repository, repoPath)
@@ -340,6 +339,7 @@ packIdxV2Parser = nameParser "packIdxV2Parser" $ do
 
   let largeOffsetCount = length $ V.filter (`Bits.testBit` 31) idxOffsets
   idxBigOffsets <- V.replicateM largeOffsetCount AB.anyWord64be <?> "large offsets"
+  --
 
   idxPackChecksum <- byteHashParser
   idxChecksum <- byteHashParser
