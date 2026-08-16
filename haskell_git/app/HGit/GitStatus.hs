@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module HGit.GitStatus (StatusOptions (..), gitStatus) where
 
 import Control.Monad (filterM, unless, when)
@@ -16,9 +14,9 @@ import HGit.Utils (fReadLine)
 data StatusOptions = StatusOptions {}
 
 getStagedChanges :: Repository -> IndexEntries -> IO [IndexTreeDiff]
-getStagedChanges repo idxEntries = do
+getStagedChanges repo entries = do
   tree <- objToTree <$> findAndCoerceObj repo TreeObj "HEAD"
-  diffTreeIndex repo tree idxEntries True
+  diffTreeIndex repo tree entries True
 
 gitStatus :: StatusOptions -> IO ()
 gitStatus StatusOptions{} = do
@@ -27,15 +25,15 @@ gitStatus StatusOptions{} = do
   putStrLn $ "On branch " ++ branch
   putStrLn ""
 
-  idxEntries <- idxEntries <$> readIndex repo
-  staged <- getStagedChanges repo idxEntries
+  entries <- idxEntries <$> readIndex repo
+  staged <- getStagedChanges repo entries
   unless (null staged) $ do
     putStrLn "Changes to be committed:"
     putStrLn "  (use \"git restore --staged <file>...\" to unstage)"
     mapM_ printStaged staged
     putStrLn ""
 
-  unstaged <- V.mapMaybeM (getEntryStatus repo) idxEntries
+  unstaged <- V.mapMaybeM (getEntryStatus repo) entries
   unless (null unstaged) $ do
     putStrLn "Changes not staged for commit:"
     putStrLn "  (use \"git add <file>...\" to update what will be committed)"
