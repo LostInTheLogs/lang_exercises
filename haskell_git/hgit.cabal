@@ -24,6 +24,8 @@ executable hgit
       HGit.Index
       HGit.Object
       HGit.ObjectCoerce
+      HGit.ObjectType
+      HGit.Packfile
       HGit.Repository
       HGit.Tree
       HGit.Utils
