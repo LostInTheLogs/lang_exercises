@@ -16,8 +16,7 @@ import HGit.GitStatus
 import Control.Monad (join)
 import HGit.Object (ObjType, deserializeObjType)
 import Options.Applicative
-import System.Exit (exitFailure)
-import System.IO (hPutStrLn, stderr)
+import Relude
 
 objTypeReader :: ReadM ObjType
 objTypeReader = maybeReader deserializeObjType

@@ -4,12 +4,13 @@ module HGit.GitInit (InitOptions (..), gitInit) where
 
 import Control.Exception (throwIO)
 import Control.Monad
-import HGit.Repository (Repository (..), repoPath)
+import HGit.Repository (Repository (..), gitPath, runWithRepo)
 import HGit.Utils
-import System.Directory
+import Relude
 import System.Exit
 import System.FilePath ((</>))
 import System.IO.Error (alreadyExistsErrorType, mkIOError)
+import qualified UnliftIO.Directory as Dir
 
 data InitOptions = InitOptions {optPath :: FilePath}
 
@@ -18,20 +19,32 @@ gitInit InitOptions{..} = do
   let worktree = optPath
       gitdir = worktree </> ".git"
 
-  createDirectoryIfMissing True gitdir
+  Dir.createDirectoryIfMissing True gitdir
 
-  contents <- listDirectory gitdir
+  contents <- Dir.listDirectory gitdir
   unless (null contents) (throwIO $ mkIOError alreadyExistsErrorType "gitInit" Nothing (Just gitdir))
 
   let repo = Repository{repoWorktree = worktree, repoGitdir = gitdir}
-  createDirectory $ repoPath repo ["objects"]
-  createDirectory $ repoPath repo ["refs"]
-  createDirectory $ repoPath repo ["refs", "tags"]
-  createDirectory $ repoPath repo ["refs", "heads"]
+  runWithRepo repo $ do
+    -- Create directory structure
+    gitPath ["objects"] >>= Dir.createDirectory
+    gitPath ["refs"] >>= Dir.createDirectory
+    gitPath ["refs", "tags"] >>= Dir.createDirectory
+    gitPath ["refs", "heads"] >>= Dir.createDirectory
 
-  writeFile (repoPath repo ["description"]) "Unnamed repository; edit this file 'description' to name the repository.\n"
-  writeFile (repoPath repo ["HEAD"]) "ref: refs/heads/master\n"
+    -- Write initial repository files
+    descPath <- gitPath ["description"]
+    writeFile descPath "Unnamed repository; edit this file 'description' to name the repository.\n"
 
-  let config = unlines ["[core]", "repositoryformatversion = 0", "filemode = false", "bare = false"]
+    headPath <- gitPath ["HEAD"]
+    writeFile headPath "ref: refs/heads/master\n"
 
-  writeFile (repoPath repo ["config"]) config
+    configPath <- gitPath ["config"]
+    let config =
+          unlines
+            [ "[core]"
+            , "\trepositoryformatversion = 0"
+            , "\tfilemode = false"
+            , "\tbare = false"
+            ]
+    writeFileText configPath config

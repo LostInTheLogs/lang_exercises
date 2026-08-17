@@ -32,11 +32,12 @@ import qualified Data.Vector.Strict as V
 import Data.Word (Word32)
 import Debug.Trace (trace)
 import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, getFileHash, makeObject)
-import HGit.Repository (Repository, repoPath, worktreePath)
+import HGit.Repository (Repository, WithRepository, gitPath, worktreePath)
 import HGit.Tree (FileMode (..))
 import HGit.Utils (nameParser, runParserUnsafe, throwErr)
-import qualified System.Directory as Dir
+import Relude
 import qualified System.Posix.Files as Files
+import qualified UnliftIO.Directory as Dir
 
 data FileStat = FileStat
   { statDataModified :: (Word32, Word32)
@@ -125,14 +126,14 @@ indexParser = nameParser "indexParser" $ do
   return Index{..}
 
 -- https://github.com/git/git/blob/master/Documentation/gitformat-index.adoc
-readIndex :: Repository -> IO Index
-readIndex repo = do
-  let indexFile = repoPath repo ["index"]
-  raw <- BSL.readFile indexFile
+readIndex :: WithRepository Index
+readIndex = do
+  indexFile <- gitPath ["index"]
+  raw <- readFileLBS indexFile
   return $ runParserUnsafe indexParser raw
 
-getStatData :: FilePath -> IO FileStat
-getStatData path = do
+getStatData :: (MonadIO m) => FilePath -> m FileStat
+getStatData path = liftIO $ do
   stat <- Files.getSymbolicLinkStatus path
   let (ctimeSec, ctimeNsec) = extractTimeParts (Files.statusChangeTimeHiRes stat)
       (mtimeSec, mtimeNsec) = extractTimeParts (Files.modificationTimeHiRes stat)
@@ -156,16 +157,16 @@ getStatData path = do
 {- | checks if the file from the entry has changed
 for git ls-files -m
 -}
-isEntryModified :: Repository -> IndexEntry -> IO Bool
-isEntryModified repo entry = do
-  newHash <- getEntryHash repo entry
+isEntryModified :: IndexEntry -> WithRepository Bool
+isEntryModified entry = do
+  newHash <- getEntryHash entry
   case newHash of
     Just hash -> return $ hash /= ieObjHash entry
     Nothing -> return True
 
-getEntryHash :: Repository -> IndexEntry -> IO (Maybe Hash)
-getEntryHash repo entry = do
-  let filePath = worktreePath repo [iePath entry]
+getEntryHash :: IndexEntry -> WithRepository (Maybe Hash)
+getEntryHash entry = do
+  filePath <- worktreePath [iePath entry]
   fileExists <- Dir.doesFileExist filePath
   if fileExists
     then do
@@ -177,9 +178,9 @@ getEntryHash repo entry = do
 
 data EntryStatus = EntryDeleted | EntryModified deriving (Show)
 
-getEntryStatus :: Repository -> IndexEntry -> IO (Maybe (EntryStatus, IndexEntry))
-getEntryStatus repo entry = do
-  newHash <- getEntryHash repo entry
+getEntryStatus :: IndexEntry -> WithRepository (Maybe (EntryStatus, IndexEntry))
+getEntryStatus entry = do
+  newHash <- getEntryHash entry
   case newHash of
     Just hash ->
       if hash == ieObjHash entry

@@ -6,13 +6,13 @@ import Control.Monad (when)
 import qualified Data.ByteString.Lazy as BSL
 import HGit.Object
 import HGit.Repository
+import Relude
 
 data HashObjectOptions = HashObjectOptions {optPath :: !FilePath, optWrite :: !Bool}
 
 gitHashObject :: HashObjectOptions -> IO ()
-gitHashObject HashObjectOptions{..} = do
-  contents <- BSL.readFile optPath
+gitHashObject HashObjectOptions{..} = runWithFoundRepo $ do
+  contents <- readFileLBS optPath
   let obj = makeObject contents BlobObj
-  repo <- getRepo
-  when optWrite $ writeObj repo obj
+  when optWrite $ writeObj obj
   putStrLn $ show $ objHash obj

@@ -1,6 +1,4 @@
-{-# LANGUAGE BinaryLiterals #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module HGit.Object (
   findObject,
@@ -19,12 +17,6 @@ module HGit.Object (
 ) where
 
 import qualified Codec.Compression.Zlib as Zlib
-import Control.Applicative (asum, many, (<|>))
-import qualified Control.Arrow as Arr
-import qualified Control.Exception as E
-import Control.Monad (guard, unless, when)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Maybe (MaybeT (..), hoistMaybe, runMaybeT)
 import qualified Crypto.Hash.SHA1 as SHA1
 import qualified Data.Attoparsec.Binary as AB
 import qualified Data.Attoparsec.ByteString.Char8 as A8
@@ -38,44 +30,45 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSCL8
-import Data.Int (Int64)
-import Data.List (foldl', isPrefixOf, stripPrefix)
+import qualified Data.List as List (stripPrefix)
 import qualified Data.Vector.Strict as V
-import Data.Word (Word32, Word64, Word8)
-import Debug.Trace
-import HGit.Repository (Repository, repoPath)
-import HGit.Utils (binarySearch, fReadBSLine, fReadLine, nameParser, note, runParserUnsafe, runParserUnsafe2, throwErr)
-import Options.Applicative (optional)
-import qualified System.Directory as Dir
+import HGit.Repository (Repository, WithRepository, gitPath, objectsPath)
+import HGit.Utils (binarySearch, fReadBSLine, fReadStrLine, nameParser, note, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
+import Relude
+import qualified Relude.File as File
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
-import qualified System.IO as IO
+import qualified Text.Show
+import qualified UnliftIO.Directory as Dir
+import qualified UnliftIO.IO as IO
 
-getHeadHash :: Repository -> IO Hash
-getHeadHash repo = do
-  refOrHead <- fReadLine $ repoPath repo ["HEAD"]
-  case stripPrefix "ref: " refOrHead of
+getHeadHash :: WithRepository Hash
+getHeadHash = do
+  refOrHead <- fReadStrLine =<< asks gitPath ["HEAD"]
+  case List.stripPrefix "ref: " refOrHead of
     Nothing -> return $ strToHash refOrHead
-    Just ref -> do strToHash <$> fReadLine (repoPath repo [ref])
+    Just ref -> do
+      path <- asks gitPath [ref]
+      strToHash <$> fReadStrLine path
 
 -- | get hash from e.g. HEAD
-findObject :: Repository -> String -> IO Hash
-findObject repo "HEAD" = getHeadHash repo
-findObject _ obj = return $ strToHash obj
+findObject :: Text -> WithRepository Hash
+findObject "HEAD" = getHeadHash
+findObject obj = return $ strToHash obj
 
 newtype Hash = Hash BS.ByteString deriving (Eq, Ord)
+
+instance Show Hash where
+  show :: Hash -> String
+  show (Hash bs) = decodeUtf8 (Base16.encode bs)
 
 hashLazy :: BSL.ByteString -> Hash
 hashLazy = Hash . SHA1.hashlazy
 
-instance Show Hash where
-  show :: Hash -> String
-  show (Hash bs) = BSC8.unpack $ Base16.encode bs
-
-strToHash :: String -> Hash
-strToHash hashStr = do
-  case Base16.decode $ BSC8.pack hashStr of
-    Left err -> throwErr "strToHash" err
+strToHash :: (ConvertUtf8 a BS.ByteString) => a -> Hash
+strToHash hashText = do
+  case Base16.decode (encodeUtf8 hashText) of
+    Left err -> throwStrErr "strToHash" err
     Right val -> Hash val
 
 byteHashParser :: A.Parser Hash
@@ -123,9 +116,6 @@ readObjType "tree" = TreeObj
 readObjType "tag" = TagObj
 readObjType _ = throwErr "deserializeObjType" "unknown type"
 
-objectsPath :: Repository -> [FilePath] -> FilePath
-objectsPath repo path = repoPath repo ("objects" : path)
-
 makeObject :: BSL.LazyByteString -> ObjType -> Object
 makeObject objPayload objType =
   let objSize = BSL.length objPayload
@@ -142,16 +132,16 @@ makeObject objPayload objType =
         blob = header <> B.lazyByteString objPayload
      in B.toLazyByteString blob
 
-writeObj :: Repository -> Object -> IO ()
-writeObj repo Object{..} = do
+writeObj :: Object -> WithRepository ()
+writeObj Object{..} = do
+  folderPath <- objectsPath [folderName]
   Dir.createDirectoryIfMissing False folderPath
   let path = folderPath </> fileName
-  BSL.writeFile path compressed
+  File.writeFileLBS path compressed
   Dir.setPermissions path $ Dir.setOwnerReadable True $ Dir.setOwnerWritable True Dir.emptyPermissions
  where
   compressed = Zlib.compress objRaw
   (folderName, fileName) = splitAt 2 $ show objHash
-  folderPath = objectsPath repo [folderName]
 
 objectFileParser :: Hash -> BSL.ByteString -> A.Parser Object
 objectFileParser expectedHash objRaw = nameParser "objectFileParser" $ do
@@ -184,60 +174,59 @@ Fallback: Scan Individual .idx Files
 
 -}
 
-readObj :: Repository -> Hash -> IO Object
-readObj repo objHash = do
-  loose <- readLooseObj repo objHash
-  pack <- readPackObj repo objHash
+readObj :: Hash -> WithRepository Object
+readObj objHash = do
+  loose <- readLooseObj objHash
+  pack <- readPackObj objHash
   let found = loose <|> pack
-  let err = throwErr "readObj" $ "Object '" ++ show objHash ++ "' not found"
+  let err = throwStrErr "readObj" $ "Object '" ++ show objHash ++ "' not found"
   maybe err return found
 
-readObjOfType :: Repository -> ObjType -> Hash -> IO Object
-readObjOfType repo expectedType objHash = do
-  obj <- readObj repo objHash
+readObjOfType :: ObjType -> Hash -> WithRepository Object
+readObjOfType expectedType objHash = do
+  obj <- readObj objHash
   when (objType obj /= expectedType) $ throwErr "readObjOfType" "wrong type"
   return obj
 
-readLooseObj :: Repository -> Hash -> IO (Maybe Object)
-readLooseObj repo objHash = runMaybeT $ do
+readLooseObj :: Hash -> WithRepository (Maybe Object)
+readLooseObj objHash = runMaybeT $ do
   let (folderName, fileName) = splitAt 2 $ show objHash
-  let loosePath = objectsPath repo [folderName, fileName]
-
-  looseFileExists <- liftIO $ Dir.doesFileExist loosePath
+  loosePath <- lift $ objectsPath [folderName, fileName]
+  looseFileExists <- Dir.doesFileExist loosePath
   guard looseFileExists
 
-  objRaw <- liftIO $ BSL.readFile loosePath
+  objRaw <- readFileLBS loosePath
   let decomp = Zlib.decompress objRaw
   let parser = objectFileParser objHash decomp
   pure $ runParserUnsafe parser decomp
 
-readPackObj :: Repository -> Hash -> IO (Maybe Object)
-readPackObj repo objHash = runMaybeT $ do
-  let packpath = objectsPath repo ["pack"]
-  packExists <- liftIO $ Dir.doesDirectoryExist packpath
+readPackObj :: Hash -> WithRepository (Maybe Object)
+readPackObj objHash = runMaybeT $ do
+  packpath <- lift $ objectsPath ["pack"]
+  packExists <- Dir.doesDirectoryExist packpath
   guard packExists
-  entries <- liftIO $ Dir.listDirectory packpath
+  entries <- Dir.listDirectory packpath
   let packIndexes = [packpath </> f | f <- entries, Path.takeExtension f == ".idx", "pack-" `isPrefixOf` f]
-  let actions = findObjInPack repo objHash <$> packIndexes
-  asum $ map MaybeT actions
+  let actions = MaybeT . findObjInPack objHash <$> packIndexes
+  asum actions
 
-findObjInPack :: Repository -> Hash -> FilePath -> IO (Maybe Object)
-findObjInPack repo objHash idxPath = runMaybeT $ do
-  raw <- liftIO $ BSL.readFile idxPath
+findObjInPack :: Hash -> FilePath -> WithRepository (Maybe Object)
+findObjInPack objHash idxPath = runMaybeT $ do
+  raw <- readFileLBS idxPath
   let PackIndex{..} = runParserUnsafe packIdxV2Parser raw
 
   offsetIdx <- hoistMaybe $ binarySearch idxObjectHashes objHash
   let rawOffset = idxOffsets V.! offsetIdx
-      isOffsetBig = Bits.testBit rawOffset 31
-      offset :: Word64
+  let isOffsetBig = Bits.testBit rawOffset 31
+  let offset :: Word64
       offset =
         if isOffsetBig
           then idxBigOffsets V.! fromIntegral (Bits.clearBit rawOffset 31)
           else fromIntegral rawOffset
 
   let packFile = Path.replaceExtension idxPath ".pack"
-  liftIO $ IO.withBinaryFile packFile IO.ReadMode $ \h -> do
-    readPackObjAtOffset repo h (fromIntegral offset)
+  lift $ IO.withBinaryFile packFile IO.ReadMode $ \h -> do
+    readPackObjAtOffset h (fromIntegral offset)
 
 {-
 n-byte type and length (3-bit type, (n-1)*7+4-bit length)
@@ -251,10 +240,10 @@ OBJ_REF_DELTA> base object name if
 OBJ_OFS_DELTA> a negative relative offset from the delta object's position in the pack
 compressed delta data
 -}
-readPackObjAtOffset :: Repository -> IO.Handle -> Integer -> IO Object
-readPackObjAtOffset repo h offset = do
+readPackObjAtOffset :: IO.Handle -> Integer -> WithRepository Object
+readPackObjAtOffset h offset = do
   IO.hSeek h IO.AbsoluteSeek offset
-  contents <- BSL.hGetContents h
+  contents <- liftIO $ BSL.hGetContents h
 
   let ((poType, poSize), packObjData) = runParserUnsafe2 packObjHeaderParser contents
 
@@ -285,14 +274,14 @@ readPackObjAtOffset repo h offset = do
 
       return obj
  where
-  getBase :: PackObjType -> BSL.ByteString -> (IO Object, BSL.ByteString)
+  getBase :: PackObjType -> BSL.ByteString -> (WithRepository Object, BSL.ByteString)
   getBase POOfsDelta raw = do
     let (offsetDelta, rest) = runParserUnsafe2 offsetParser raw
-    let base = readPackObjAtOffset repo h (offset - offsetDelta)
+    let base = readPackObjAtOffset h (offset - offsetDelta)
     (base, rest)
   getBase PORefDelta raw = do
-    let (hash, rest) = Arr.first (Hash . BSL.toStrict) $ BSL.splitAt 20 raw
-    let base = readObj repo hash
+    let (hash, rest) = first (Hash . BSL.toStrict) $ BSL.splitAt 20 raw
+    let base = readObj hash
     (base, rest)
   getBase _ _ = throwErr "packObjParser" "Not a delta obj, programmer error"
 
@@ -439,8 +428,8 @@ packObjHeaderParser = nameParser "packObjHeaderParser" $ do
     let x = fromIntegral $ a .&. 0b01111111
      in (acc .|. (x `Bits.shiftL` shift), shift + 7)
 
-getFileHash :: FilePath -> IO Hash
-getFileHash path = do
+getFileHash :: (MonadIO m) => FilePath -> m Hash
+getFileHash path = liftIO $ do
   contents <- BSL.readFile path
   let obj = makeObject contents BlobObj
   return $ objHash obj

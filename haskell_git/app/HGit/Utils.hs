@@ -1,11 +1,13 @@
 module HGit.Utils (
   putStrErrLn,
   note,
-  fReadLine,
+  fReadTxtLine,
+  fReadStrLine,
   fReadBSLine,
   runParserUnsafe,
   runParserUnsafe2,
   throwErr,
+  throwStrErr,
   binarySearch,
   nameParser,
 ) where
@@ -15,10 +17,13 @@ import qualified Data.Attoparsec.Lazy as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.List as List
-import Data.Maybe (catMaybes)
+import Data.List.Extra (headDef)
+import qualified Data.Text.IO as TIO
 import qualified Data.Vector.Strict as V
-import System.IO (IOMode (ReadMode), hGetLine, withFile)
+import Relude
+import qualified Relude.Unsafe as Unsafe
+import qualified System.IO as IO
+import qualified Prelude as P (error)
 
 putStrErrLn :: [Char] -> IO ()
 putStrErrLn err = putStrLn $ "Error: " ++ err
@@ -27,29 +32,35 @@ putStrErrLn err = putStrLn $ "Error: " ++ err
 note :: a -> Maybe b -> Either a b
 note a = maybe (Left a) Right
 
-fReadLine :: FilePath -> IO String
-fReadLine path = withFile path ReadMode hGetLine
+fReadTxtLine :: (MonadIO m) => FilePath -> m Text
+fReadTxtLine path = liftIO $ withFile path ReadMode TIO.hGetLine
 
-fReadBSLine :: FilePath -> IO BS.ByteString
-fReadBSLine path = withFile path ReadMode BSC8.hGetLine
+fReadStrLine :: (MonadIO m) => FilePath -> m String
+fReadStrLine path = liftIO $ withFile path ReadMode IO.hGetLine
+
+fReadBSLine :: (MonadIO m) => FilePath -> m ByteString
+fReadBSLine path = liftIO $ withFile path ReadMode BSC8.hGetLine
 
 runParserUnsafe :: A.Parser a -> BSL.ByteString -> a
 runParserUnsafe parser input = do
   let res = A.parse parser input
   case A.eitherResult res of
     Right obj -> obj
-    Left err -> throwErr "runParserUnsafe" err
+    Left err -> throwStrErr "runParserUnsafe" err
 
 runParserUnsafe2 :: A.Parser a -> BSL.ByteString -> (a, BSL.ByteString)
 runParserUnsafe2 parser input = do
   let res = A.parse parser input
   case res of
     A.Done rest obj -> (obj, rest)
-    A.Fail _ [] msg -> throwErr "runParserUnsafe2" msg
-    A.Fail _ ctx msg -> throwErr "runParserUnsafe2" (List.intercalate " > " ctx ++ ": " ++ msg)
+    A.Fail _ [] msg -> throwStrErr "runParserUnsafe2" msg
+    A.Fail _ ctx msg -> throwStrErr "runParserUnsafe2" (intercalate " > " ctx <> ": " <> msg)
 
-throwErr :: String -> String -> a
+throwErr :: Text -> Text -> a
 throwErr who msg = error $ "fatal: " <> who <> ": " <> msg
+
+throwStrErr :: String -> String -> a
+throwStrErr who msg = P.error $ "fatal: " <> who <> ": " <> msg
 
 {- | Performs a binary search on a sorted Vector.
 Returns `Just index` if found, or `Nothing` if the target doesn't exist.

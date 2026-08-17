@@ -3,6 +3,7 @@ version: 0.1.0.0
 
 dependencies:
   - base == 4.*
+  - relude
   - directory
   - filepath
   - mtl
@@ -18,6 +19,8 @@ dependencies:
   - containers
   - text
   - unix
+  - extra
+  - unliftio
 
 executables:
   hgit:
@@ -33,3 +36,12 @@ ghc-options:
   - -fno-warn-type-defaults
   - -ferror-spans
   - -Werror=missing-fields
+  - -O2
+
+default-extensions:
+  - NoImplicitPrelude
+  - BinaryLiterals
+  - InstanceSigs
+  - RecordWildCards
+  - OverloadedStrings
+  - LambdaCase

@@ -7,38 +7,38 @@ import HGit.GitDiffIndex (IndexTreeDiff (..), diffTreeIndex)
 import HGit.Index (EntryStatus (..), IndexEntries, IndexEntry (..), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)
 import HGit.Object (ObjType (..))
 import HGit.ObjectCoerce (findAndCoerceObj)
-import HGit.Repository (Repository, getRepo, repoPath)
+import HGit.Repository (Repository, WithRepository, gitPath, runWithFoundRepo)
 import HGit.Tree (objToTree)
-import HGit.Utils (fReadLine)
+import HGit.Utils (fReadStrLine)
+import Relude
 
 data StatusOptions = StatusOptions {}
 
-getStagedChanges :: Repository -> IndexEntries -> IO [IndexTreeDiff]
-getStagedChanges repo entries = do
-  tree <- objToTree <$> findAndCoerceObj repo TreeObj "HEAD"
-  diffTreeIndex repo tree entries True
+getStagedChanges :: IndexEntries -> WithRepository [IndexTreeDiff]
+getStagedChanges entries = do
+  tree <- objToTree <$> findAndCoerceObj TreeObj "HEAD"
+  diffTreeIndex tree entries True
 
 gitStatus :: StatusOptions -> IO ()
-gitStatus StatusOptions{} = do
-  repo <- getRepo
-  branch <- getBranch repo
-  putStrLn $ "On branch " ++ branch
+gitStatus StatusOptions{} = runWithFoundRepo $ do
+  branch <- getBranch
+  putStrLn $ "On branch " <> branch
   putStrLn ""
 
-  entries <- idxEntries <$> readIndex repo
-  staged <- getStagedChanges repo entries
+  entries <- idxEntries <$> readIndex
+  staged <- getStagedChanges entries
   unless (null staged) $ do
     putStrLn "Changes to be committed:"
     putStrLn "  (use \"git restore --staged <file>...\" to unstage)"
-    mapM_ printStaged staged
+    liftIO $ mapM_ printStaged staged
     putStrLn ""
 
-  unstaged <- V.mapMaybeM (getEntryStatus repo) entries
+  unstaged <- V.mapMaybeM getEntryStatus entries
   unless (null unstaged) $ do
     putStrLn "Changes not staged for commit:"
     putStrLn "  (use \"git add <file>...\" to update what will be committed)"
     putStrLn "  (use \"git restore <file>...\" to discard changes in working directory)"
-    mapM_ printUnstaged unstaged
+    liftIO $ mapM_ printUnstaged unstaged
     putStrLn ""
 
   when (null staged && null unstaged) $ putStrLn "nothing to commit, working tree clean"
@@ -50,16 +50,17 @@ gitStatus StatusOptions{} = do
 
 printStaged :: IndexTreeDiff -> IO ()
 printStaged diff =
-  putStr "  \t" *> case diff of
-    ITDAdded entry -> do
-      putStr "new file:   "
-      putStrLn $ iePath entry
-    ITDDeleted (path, _item) -> do
-      putStr "deleted:    "
-      putStrLn path
-    ITDModified _item entry -> do
-      putStr "modified:   "
-      putStrLn $ iePath entry
+  liftIO $
+    putStr "  \t" *> case diff of
+      ITDAdded entry -> do
+        putStr "new file:   "
+        putStrLn $ iePath entry
+      ITDDeleted (path, _item) -> do
+        putStr "deleted:    "
+        putStrLn path
+      ITDModified _item entry -> do
+        putStr "modified:   "
+        putStrLn $ iePath entry
 
 printUnstaged :: (EntryStatus, IndexEntry) -> IO ()
 printUnstaged (status, entry) = do
@@ -69,9 +70,9 @@ printUnstaged (status, entry) = do
     EntryDeleted -> "deleted:    "
   putStrLn $ iePath entry
 
-getBranch :: Repository -> IO String
-getBranch repo = do
-  refOrHead <- fReadLine $ repoPath repo ["HEAD"]
+getBranch :: WithRepository String
+getBranch = do
+  refOrHead <- fReadStrLine =<< gitPath ["HEAD"]
   case stripPrefix "ref: refs/heads/" refOrHead of
     Nothing -> return refOrHead
     Just ref -> return ref

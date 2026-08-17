@@ -5,17 +5,17 @@ module HGit.GitCatFile (CatFileOptions (..), gitCatFile) where
 import qualified Data.ByteString.Lazy as BSL
 import HGit.Object
 import HGit.ObjectCoerce (coerceObjTo, findAndCoerceObj)
-import HGit.Repository (getRepo)
+import HGit.Repository (runWithFoundRepo)
 import HGit.Utils (putStrErrLn)
+import Relude
 
-data CatFileOptions = CatFileOptions {optType :: ObjType, optObject :: String}
+data CatFileOptions = CatFileOptions {optType :: ObjType, optObject :: Text}
 
 gitCatFile :: CatFileOptions -> IO ()
-gitCatFile CatFileOptions{..} = do
-  repo <- getRepo
-  obj <- findAndCoerceObj repo optType optObject
+gitCatFile CatFileOptions{..} = runWithFoundRepo $ do
+  obj <- findAndCoerceObj optType optObject
   catObject obj
 
-catObject :: Object -> IO ()
-catObject Object{objType = _, ..} = do
+catObject :: (MonadIO m) => Object -> m ()
+catObject Object{objType = _, ..} = liftIO $ do
   BSL.putStr objPayload

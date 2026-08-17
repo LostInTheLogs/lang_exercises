@@ -1,13 +1,9 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module HGit.Commit (
   readCommit,
   objToCommit,
   Commit (..),
 ) where
 
-import Control.Applicative (many)
 import qualified Data.Attoparsec.ByteString.Char8 as A8
 import Data.Attoparsec.ByteString.Lazy ((<?>))
 import qualified Data.Attoparsec.ByteString.Lazy as A
@@ -16,17 +12,10 @@ import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
-import Data.List (stripPrefix)
-import GHC.List (uncons)
 import HGit.Object (Hash, ObjType (CommitObj), Object (..), asciiHashParser, readObj, readObjOfType)
-import HGit.Repository (Repository, repoPath)
-import HGit.Utils (fReadLine, runParserUnsafe, throwErr)
-
--- import Data.Int (Int64)
--- import HGit.Repository (Repository, repoPath)
--- import HGit.Utils (note)
--- import System.Directory (createDirectoryIfMissing, emptyPermissions, setOwnerReadable, setOwnerWritable, setPermissions)
--- import System.FilePath ((</>))
+import HGit.Repository (Repository, WithRepository, gitPath)
+import HGit.Utils (fReadStrLine, runParserUnsafe, throwErr)
+import Relude
 
 data Commit = Commit
   { commitHash :: !Hash -- 20 byte
@@ -68,5 +57,5 @@ commitParser commitHash = do
 objToCommit :: Object -> Commit
 objToCommit Object{..} = runParserUnsafe (commitParser objHash) objPayload
 
-readCommit :: Repository -> Hash -> IO Commit
-readCommit repo hash = objToCommit <$> readObjOfType repo CommitObj hash
+readCommit :: Hash -> WithRepository Commit
+readCommit hash = objToCommit <$> readObjOfType CommitObj hash

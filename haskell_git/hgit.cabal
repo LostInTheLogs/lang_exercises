@@ -6,7 +6,6 @@ cabal-version: 1.12
 
 name:           hgit
 version:        0.1.0.0
-license-file:   LICENSE
 build-type:     Simple
 
 executable hgit
@@ -31,7 +30,14 @@ executable hgit
       Paths_hgit
   hs-source-dirs:
       app
-  ghc-options: -Wall -fwarn-incomplete-uni-patterns -fno-warn-unused-binds -fno-warn-unused-do-bind -fno-warn-unused-imports -fno-warn-type-defaults -ferror-spans -Werror=missing-fields
+  default-extensions:
+      NoImplicitPrelude
+      BinaryLiterals
+      InstanceSigs
+      RecordWildCards
+      OverloadedStrings
+      LambdaCase
+  ghc-options: -Wall -fwarn-incomplete-uni-patterns -fno-warn-unused-binds -fno-warn-unused-do-bind -fno-warn-unused-imports -fno-warn-type-defaults -ferror-spans -Werror=missing-fields -O2
   build-depends:
       attoparsec
     , attoparsec-binary
@@ -41,13 +47,15 @@ executable hgit
     , containers
     , cryptohash-sha1
     , directory
+    , extra
     , filepath
     , mtl
     , optparse-applicative
+    , relude
     , text
     , transformers
     , unix
+    , unliftio
     , vector
-    , vector-algorithms
     , zlib
   default-language: Haskell2010

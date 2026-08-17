@@ -6,20 +6,20 @@ import Control.Monad (filterM)
 import qualified Data.Vector.Strict as V
 import HGit.Index (Index (..), IndexEntry (..), isEntryModified, readIndex)
 import HGit.Object (Hash, ObjType (CommitObj), findObject, objPayload, readObj, strToHash)
-import HGit.Repository (Repository, getRepo)
+import HGit.Repository (Repository, runWithFoundRepo)
+import Relude
 
 data LsFilesOptions = LsFilesOptions {optModified :: Bool}
 
 gitLsFiles :: LsFilesOptions -> IO ()
-gitLsFiles LsFilesOptions{..} = do
-  repo <- getRepo
-  Index{..} <- readIndex repo
+gitLsFiles LsFilesOptions{..} = runWithFoundRepo $ do
+  Index{..} <- readIndex
   entries <-
     if optModified
-      then V.filterM (isEntryModified repo) idxEntries
+      then V.filterM (isEntryModified) idxEntries
       else return idxEntries
   mapM_ lsFile entries
 
-lsFile :: IndexEntry -> IO ()
-lsFile IndexEntry{..} = do
+lsFile :: (MonadIO m) => IndexEntry -> m ()
+lsFile IndexEntry{..} = liftIO $ do
   putStrLn iePath

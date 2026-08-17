@@ -1,6 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module HGit.Tree (
   readTree,
   objToTree,
@@ -11,8 +8,6 @@ module HGit.Tree (
   FileMode (..),
 ) where
 
-import Control.Applicative (many)
-import Control.Arrow (first)
 import qualified Data.Attoparsec.ByteString.Char8 as A8
 import Data.Attoparsec.ByteString.Lazy ((<?>))
 import qualified Data.Attoparsec.ByteString.Lazy as A
@@ -21,12 +16,11 @@ import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
-import Data.List (stripPrefix)
 import qualified Data.String
-import GHC.List (uncons)
 import HGit.Object (Hash, ObjType (TreeObj), Object (..), byteHashParser, readObj, readObjOfType)
-import HGit.Repository (Repository, repoPath)
-import HGit.Utils (fReadLine, nameParser, runParserUnsafe, throwErr)
+import HGit.Repository (Repository, WithRepository (WithRepository), gitPath)
+import HGit.Utils (fReadStrLine, nameParser, runParserUnsafe, throwErr)
+import Relude
 import System.FilePath ((</>))
 
 data FileMode
@@ -47,7 +41,7 @@ modeParser = do
     "040000" -> pure Directory
     "40000" -> pure Directory
     "160000" -> pure Gitlink
-    other -> fail $ "Unknown tree object mode: " ++ show other
+    other -> fail $ "Unknown tree object mode: " <> show other
 
 modeToStr :: (Data.String.IsString a) => FileMode -> a
 modeToStr mode =
@@ -82,16 +76,16 @@ treeParser treeHash = nameParser "treeParser" $ do
 objToTree :: Object -> Tree
 objToTree Object{..} = runParserUnsafe (treeParser objHash) objPayload
 
-readTree :: Repository -> Hash -> IO Tree
-readTree repo hash = do
-  Object{..} <- readObjOfType repo TreeObj hash
+readTree :: Hash -> WithRepository Tree
+readTree hash = do
+  Object{..} <- readObjOfType TreeObj hash
   return $ runParserUnsafe (treeParser hash) objPayload
 
-flattenTree :: Repository -> Tree -> IO [(FilePath, TreeItem)]
-flattenTree repo tree = concat <$> mapM go (treeItems tree)
+flattenTree :: Tree -> WithRepository [(FilePath, TreeItem)]
+flattenTree tree = concat <$> mapM go (treeItems tree)
  where
-  go :: TreeItem -> IO [(FilePath, TreeItem)]
+  go :: TreeItem -> WithRepository [(FilePath, TreeItem)]
   go dir@TreeItem{tiMode = Directory, tiHash = treeHash} = do
-    items <- flattenTree repo =<< readTree repo treeHash
+    items <- flattenTree =<< readTree treeHash
     return $ first (tiName dir </>) <$> items
   go item = return [(tiName item, item)]

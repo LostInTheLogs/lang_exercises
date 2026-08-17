@@ -12,26 +12,26 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
 import HGit.Commit (Commit (..), readCommit)
 import HGit.Object (Hash, ObjType (CommitObj), findObject, objPayload, readObj, strToHash)
-import HGit.Repository (Repository, getRepo)
+import HGit.Repository (Repository, WithRepository, runWithFoundRepo)
+import Relude
 
-data LogOptions = LogOptions {optRef :: String}
+data LogOptions = LogOptions {optRef :: Text}
 
 gitLog :: LogOptions -> IO ()
-gitLog LogOptions{..} = do
-  repo <- getRepo
-  rootHash <- findObject repo optRef
-  logRec repo [rootHash] Set.empty
+gitLog LogOptions{..} = runWithFoundRepo $ do
+  rootHash <- findObject optRef
+  logRec [rootHash] Set.empty
 
-logRec :: Repository -> [Hash] -> Set.Set Hash -> IO ()
-logRec _ [] _ = return ()
-logRec repo (hash : hashes) seen =
+logRec :: [Hash] -> Set.Set Hash -> WithRepository ()
+logRec [] _ = return ()
+logRec (hash : hashes) seen =
   if Set.member hash seen
     then
-      logRec repo hashes seen
+      logRec hashes seen
     else do
-      commit <- readCommit repo hash
-      TIO.putStrLn $ oneLine commit
-      logRec repo (hashes ++ commitParents commit) (Set.insert hash seen)
+      commit <- readCommit hash
+      putTextLn $ oneLine commit
+      logRec (hashes ++ commitParents commit) (Set.insert hash seen)
 
 oneLine :: Commit -> T.Text
 oneLine Commit{..} = do
