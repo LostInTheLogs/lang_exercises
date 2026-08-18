@@ -21,6 +21,7 @@ executable hgit
       HGit.GitLsFiles
       HGit.GitLsTree
       HGit.GitStatus
+      HGit.Ignore
       HGit.Index
       HGit.Object
       HGit.ObjectCoerce
@@ -51,6 +52,7 @@ executable hgit
     , directory
     , extra
     , filepath
+    , filepattern
     , mtl
     , optparse-applicative
     , relude

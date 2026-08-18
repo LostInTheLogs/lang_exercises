@@ -1,15 +1,18 @@
 module HGit.GitStatus (StatusOptions (..), gitStatus) where
 
-import Control.Monad (filterM, unless, when)
 import Data.List (stripPrefix)
+import qualified Data.List as List
+import qualified Data.Set as Set
+import qualified Data.Text as T
 import qualified Data.Vector.Strict as V
 import HGit.GitDiffIndex (IndexTreeDiff (..), diffTreeIndex)
+import HGit.Ignore (listFilesRecursive)
 import HGit.Index (EntryStatus (..), IndexEntries, IndexEntry (..), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)
 import HGit.Object (ObjType (..))
 import HGit.ObjectCoerce (findAndCoerceObj)
-import HGit.Repository (Repository, WithRepository, gitPath, runWithFoundRepo)
+import HGit.Repository (Repository (repoWorktree), WithRepository, gitPath, runWithFoundRepo, worktreePath)
 import HGit.Tree (objToTree)
-import HGit.Utils (fReadStrLine)
+import HGit.Utils (fReadStrLine, throwErr)
 import Relude
 
 data StatusOptions = StatusOptions {}
@@ -41,12 +44,15 @@ gitStatus StatusOptions{} = runWithFoundRepo $ do
     liftIO $ mapM_ printUnstaged unstaged
     putStrLn ""
 
+  untracked <- getUntracked entries
+  unless (null untracked) $ do
+    putStrLn "Untracked files:"
+    putStrLn "  (use \"git add <file>...\" to include in what will be committed)"
+    liftIO $ mapM_ printUntracked untracked
+    putStrLn ""
+
   when (null staged && null unstaged) $ putStrLn "nothing to commit, working tree clean"
   when (null staged && not (null unstaged)) $ putStrLn "no changes added to commit (use \"git add\" and/or \"git commit -a\")"
-
--- TODO:
--- Untracked files:
---   (use "git add <file>..." to include in what will be committed)
 
 printStaged :: IndexTreeDiff -> IO ()
 printStaged diff =
@@ -70,9 +76,20 @@ printUnstaged (status, entry) = do
     EntryDeleted -> "deleted:    "
   putStrLn $ iePath entry
 
+printUntracked :: FilePath -> IO ()
+printUntracked path = do
+  putStr "  \t"
+  putStrLn path
+
 getBranch :: WithRepository String
 getBranch = do
   refOrHead <- fReadStrLine =<< gitPath ["HEAD"]
   case stripPrefix "ref: refs/heads/" refOrHead of
     Nothing -> return refOrHead
     Just ref -> return ref
+
+getUntracked :: IndexEntries -> WithRepository (Set.Set FilePath)
+getUntracked entries = do
+  let tracked = Set.fromList $ V.toList $ iePath <$> entries
+  files <- Set.fromList <$> listFilesRecursive
+  return $ Set.difference files tracked

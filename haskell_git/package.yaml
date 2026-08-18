@@ -21,6 +21,7 @@ dependencies:
   - unix
   - extra
   - unliftio
+  - filepattern
 
 executables:
   hgit:
