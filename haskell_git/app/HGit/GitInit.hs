@@ -10,13 +10,15 @@ import Relude
 import System.Exit
 import System.FilePath ((</>))
 import System.IO.Error (alreadyExistsErrorType, mkIOError)
+import UnliftIO.Directory (canonicalizePath)
 import qualified UnliftIO.Directory as Dir
 
 data InitOptions = InitOptions {optPath :: FilePath}
 
 gitInit :: InitOptions -> IO ()
 gitInit InitOptions{..} = do
-  let worktree = optPath
+  path <- canonicalizePath optPath
+  let worktree = path
       gitdir = worktree </> ".git"
 
   Dir.createDirectoryIfMissing True gitdir

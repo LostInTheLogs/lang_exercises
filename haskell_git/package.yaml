@@ -16,6 +16,7 @@ dependencies:
   - attoparsec
   - attoparsec-binary
   - vector
+  - vector-algorithms
   - containers
   - text
   - unix

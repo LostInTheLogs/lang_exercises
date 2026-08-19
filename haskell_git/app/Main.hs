@@ -73,6 +73,12 @@ statusParser =
   gitStatus <$> do
     pure (StatusOptions{..})
 
+addParser :: Parser (IO ())
+addParser =
+  gitAdd <$> do
+    optPath <- argument str (metavar "PATH" <> help "Path to file(s)")
+    pure (AddOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -90,3 +96,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "ls-files" (info lsFilesParser (progDesc "information about files in index/working directory"))
         <> command "diff-index" (info diffIndexParser (progDesc "compare content and mode of blobs between index and repository"))
         <> command "status" (info statusParser (progDesc "show working-tree status"))
+        <> command "add" (info addParser (progDesc "add file to index"))

@@ -14,6 +14,7 @@ executable hgit
       HGit.Commit
       HGit.GitAdd
       HGit.GitCatFile
+      HGit.GitCheckout
       HGit.GitDiffIndex
       HGit.GitHashObject
       HGit.GitInit
@@ -61,5 +62,6 @@ executable hgit
     , unix
     , unliftio
     , vector
+    , vector-algorithms
     , zlib
   default-language: Haskell2010

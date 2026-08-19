@@ -49,8 +49,13 @@ writeObj Object{..} = do
   folderPath <- objectsPath [folderName]
   Dir.createDirectoryIfMissing False folderPath
   let path = folderPath </> fileName
+
+  fileExists <- Dir.doesFileExist path
+  when fileExists $ Dir.removeFile path
+
   File.writeFileLBS path compressed
-  Dir.setPermissions path $ Dir.setOwnerReadable True $ Dir.setOwnerWritable True Dir.emptyPermissions
+
+  Dir.setPermissions path $ Dir.setOwnerReadable True Dir.emptyPermissions
  where
   compressed = Zlib.compress objRaw
   (folderName, fileName) = splitAt 2 $ show objHash

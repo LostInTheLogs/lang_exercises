@@ -9,9 +9,11 @@ module HGit.Utils (
   throwErr,
   throwStrErr,
   binarySearch,
+  insertManySorted,
   nameParser,
 ) where
 
+import Control.Monad.ST (runST)
 import Data.Attoparsec.Lazy ((<?>))
 import qualified Data.Attoparsec.Lazy as A
 import qualified Data.ByteString as BS
@@ -19,6 +21,8 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import Data.List.Extra (headDef)
 import qualified Data.Text.IO as TIO
+import qualified Data.Vector.Algorithms.Heap as VS
+import qualified Data.Vector.Algorithms.Search as VAS
 import qualified Data.Vector.Strict as V
 import Relude
 import qualified Relude.Unsafe as Unsafe
@@ -77,6 +81,9 @@ binarySearch vec target = loop 0 (V.length vec - 1)
               LT -> loop low (mid - 1)
               GT -> loop (mid + 1) high
               EQ -> Just mid
+
+insertManySorted :: (Ord a) => V.Vector a -> V.Vector a -> V.Vector a
+insertManySorted large small = V.modify VS.sort (large V.++ small)
 
 nameParser :: String -> A.Parser a -> A.Parser a
 nameParser name parser = parser <?> name

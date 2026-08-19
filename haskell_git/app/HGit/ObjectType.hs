@@ -55,7 +55,7 @@ findObject :: Text -> WithRepository Hash
 findObject "HEAD" = getHeadHash
 findObject obj = return $ strToHash obj
 
-newtype Hash = Hash BS.ByteString deriving (Eq, Ord)
+newtype Hash = Hash {hashBS :: BS.ByteString} deriving (Eq, Ord)
 
 instance Show Hash where
   show :: Hash -> String

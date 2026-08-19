@@ -1,4 +1,4 @@
-module HGit.Ignore (listFilesRecursive) where
+module HGit.Ignore (listRepoFilesRecursive) where
 
 import Data.List.Extra (lastDef)
 import qualified Data.Text as T
@@ -16,12 +16,12 @@ data GitGlobMeta = GitGlobMeta
 
 type GitGlob = (GitGlobMeta, FP.FilePattern)
 
-listFilesRecursive :: WithRepository [FilePath]
-listFilesRecursive = listFilesRecursive_ [] ""
+listRepoFilesRecursive :: FilePath -> WithRepository [FilePath]
+listRepoFilesRecursive = listRepoFilesRecursive_ []
 
 -- https://hackage.haskell.org/package/filepattern-0.1.3/docs/System-FilePattern.html#v:stepDone
-listFilesRecursive_ :: [FP.Step GitGlobMeta] -> FilePath -> WithRepository [FilePath]
-listFilesRecursive_ oldSteps relPath = do
+listRepoFilesRecursive_ :: [FP.Step GitGlobMeta] -> FilePath -> WithRepository [FilePath]
+listRepoFilesRecursive_ oldSteps relPath = do
   absPath <- worktreePath [relPath]
   entries <- Dir.listDirectory absPath
 
@@ -43,7 +43,7 @@ listFilesRecursive_ oldSteps relPath = do
     case (keep, isDir, entry) of
       (False, _, _) -> pure []
       (_, _, ".git") -> pure []
-      (_, True, _) -> listFilesRecursive_ newSteps relEntry
+      (_, True, _) -> listRepoFilesRecursive_ newSteps relEntry
       (_, False, _) -> pure [relEntry]
  where
   loadGitignore :: WithRepository (FP.Step GitGlobMeta)

@@ -6,7 +6,7 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Vector.Strict as V
 import HGit.GitDiffIndex (IndexTreeDiff (..), diffTreeIndex)
-import HGit.Ignore (listFilesRecursive)
+import HGit.Ignore (listRepoFilesRecursive)
 import HGit.Index (EntryStatus (..), IndexEntries, IndexEntry (..), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)
 import HGit.Object (ObjType (..))
 import HGit.ObjectCoerce (findAndCoerceObj)
@@ -91,5 +91,5 @@ getBranch = do
 getUntracked :: IndexEntries -> WithRepository (Set.Set FilePath)
 getUntracked entries = do
   let tracked = Set.fromList $ V.toList $ iePath <$> entries
-  files <- Set.fromList <$> listFilesRecursive
+  files <- Set.fromList <$> listRepoFilesRecursive ""
   return $ Set.difference files tracked
