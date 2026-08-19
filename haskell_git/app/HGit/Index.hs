@@ -69,13 +69,13 @@ data IndexEntry = IndexEntry
   }
   deriving (Show)
 
+instance Eq IndexEntry where
+  (==) :: IndexEntry -> IndexEntry -> Bool
+  a == b = iePath a == iePath b -- TODO: stage flag sorting if equal
+
 instance Ord IndexEntry where
   compare :: IndexEntry -> IndexEntry -> Ordering
   compare a b = compare (iePath a) (iePath b) -- TODO: stage flag sorting if equal
-
-instance Eq IndexEntry where
-  (==) :: IndexEntry -> IndexEntry -> Bool
-  a == b = ieObjHash a == ieObjHash b
 
 type IndexEntries = V.Vector IndexEntry
 
