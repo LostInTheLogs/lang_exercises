@@ -12,6 +12,7 @@ executable hgit
   main-is: Main.hs
   other-modules:
       HGit.Commit
+      HGit.FindObject
       HGit.GitAdd
       HGit.GitCatFile
       HGit.GitCheckout
@@ -26,7 +27,6 @@ executable hgit
       HGit.Ignore
       HGit.Index
       HGit.Object
-      HGit.ObjectCoerce
       HGit.ObjectType
       HGit.Packfile
       HGit.Repository

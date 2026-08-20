@@ -5,6 +5,7 @@ module HGit.Repository (
   worktreePath,
   worktreePath',
   objectsPath,
+  headsPath,
   runWithRepo,
   runWithFoundRepo,
   toWorktreePath,
@@ -55,6 +56,9 @@ worktreePath' path = do
 
 objectsPath :: [FilePath] -> WithRepository FilePath
 objectsPath path = gitPath ("objects" : path)
+
+headsPath :: FilePath -> WithRepository FilePath
+headsPath head' = gitPath ["refs", "heads", head']
 
 -- | Recursively find repo
 findRepo :: IO (Maybe Repository)

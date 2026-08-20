@@ -5,11 +5,11 @@ import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Vector as V
+import HGit.FindObject (findAndCoerceObj)
 import HGit.GitDiffIndex (IndexTreeDiff (..), diffTreeIndex)
 import HGit.Ignore (listRepoFilesRecursive)
 import HGit.Index (EntryStatus (..), IndexEntries, IndexEntry (..), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)
 import HGit.Object (ObjType (..))
-import HGit.ObjectCoerce (findAndCoerceObj)
 import HGit.Repository (Repository (repoWorktree), WithRepository, gitPath, runWithFoundRepo, worktreePath)
 import HGit.Tree (objToTree)
 import HGit.Utils (fReadStrLine, throwErr)

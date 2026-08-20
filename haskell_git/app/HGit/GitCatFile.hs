@@ -3,8 +3,8 @@
 module HGit.GitCatFile (CatFileOptions (..), gitCatFile) where
 
 import qualified Data.ByteString.Lazy as BSL
+import HGit.FindObject (coerceObjTo, findAndCoerceObj)
 import HGit.Object
-import HGit.ObjectCoerce (coerceObjTo, findAndCoerceObj)
 import HGit.Repository (runWithFoundRepo)
 import HGit.Utils (putStrErrLn)
 import Relude

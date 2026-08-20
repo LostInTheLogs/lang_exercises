@@ -11,8 +11,8 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
-import HGit.Object (ObjType (CommitObj, TreeObj), findObject, objPayload, readObj, strToHash)
-import HGit.ObjectCoerce (findAndCoerceObj)
+import HGit.FindObject (findAndCoerceObj)
+import HGit.Object (ObjType (CommitObj, TreeObj), objPayload, readObj, strToHash)
 import HGit.Repository (Repository, runWithFoundRepo)
 import HGit.Tree (FileMode (..), Tree (..), TreeItem (..), flattenTree, modeToStr, objToTree, readTree)
 import HGit.Utils (throwErr)

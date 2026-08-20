@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module HGit.Object (
-  findObject,
   writeObj,
   readObj,
   readObjOfType,

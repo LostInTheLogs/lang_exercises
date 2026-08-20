@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module HGit.ObjectType (
-  findObject,
   makeObject,
   deserializeObjType,
   strToHash,
@@ -40,20 +39,6 @@ import qualified System.FilePath as Path
 import qualified Text.Show
 import qualified UnliftIO.Directory as Dir
 import qualified UnliftIO.IO as IO
-
-getHeadHash :: WithRepository Hash
-getHeadHash = do
-  refOrHead <- fReadStrLine =<< asks gitPath ["HEAD"]
-  case List.stripPrefix "ref: " refOrHead of
-    Nothing -> return $ strToHash refOrHead
-    Just ref -> do
-      path <- asks gitPath [ref]
-      strToHash <$> fReadStrLine path
-
--- | get hash from e.g. HEAD
-findObject :: Text -> WithRepository Hash
-findObject "HEAD" = getHeadHash
-findObject obj = return $ strToHash obj
 
 newtype Hash = Hash {hashBS :: BS.ByteString} deriving (Eq, Ord)
 
