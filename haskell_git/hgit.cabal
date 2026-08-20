@@ -15,6 +15,7 @@ executable hgit
       HGit.GitAdd
       HGit.GitCatFile
       HGit.GitCheckout
+      HGit.GitCheckoutIndex
       HGit.GitDiffIndex
       HGit.GitHashObject
       HGit.GitInit

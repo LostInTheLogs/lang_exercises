@@ -21,9 +21,9 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import Data.List.Extra (headDef)
 import qualified Data.Text.IO as TIO
+import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Heap as VS
 import qualified Data.Vector.Algorithms.Search as VAS
-import qualified Data.Vector.Strict as V
 import Relude
 import qualified Relude.Unsafe as Unsafe
 import qualified System.IO as IO

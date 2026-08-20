@@ -3,7 +3,7 @@
 module HGit.GitLsFiles (gitLsFiles, LsFilesOptions (..)) where
 
 import Control.Monad (filterM)
-import qualified Data.Vector.Strict as V
+import qualified Data.Vector as V
 import HGit.Index (Index (..), IndexEntry (..), isEntryModified, readIndex)
 import HGit.Object (Hash, ObjType (CommitObj), findObject, objPayload, readObj, strToHash)
 import HGit.Repository (Repository, runWithFoundRepo)

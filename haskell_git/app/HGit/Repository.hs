@@ -7,15 +7,19 @@ module HGit.Repository (
   objectsPath,
   runWithRepo,
   runWithFoundRepo,
+  toWorktreePath,
   Repository (..),
   WithRepository (..),
+  WorkTreePath,
 ) where
 
-import HGit.Utils (throwErr)
+import qualified Data.List as List
+import HGit.Utils (throwErr, throwStrErr)
 import Relude
 import System.Directory (canonicalizePath, doesDirectoryExist)
 import System.FilePath
 import UnliftIO (MonadUnliftIO)
+import qualified UnliftIO.Directory as Dir
 
 data Repository = Repository
   { repoWorktree :: FilePath
@@ -81,3 +85,15 @@ openRepo worktree = do
     then
       return $ Just Repository{repoWorktree = worktree, repoGitdir = gitdir}
     else return Nothing
+
+type WorkTreePath = FilePath
+
+toWorktreePath :: FilePath -> WithRepository (FilePath, WorkTreePath)
+toWorktreePath path = do
+  fullpath <- Dir.canonicalizePath path
+  worktreePrefix <- asks repoWorktree
+  let relative = makeRelative worktreePrefix fullpath
+  return $ case (relative, worktreePrefix `isPrefixOf` fullpath) of
+    (".", _) -> (fullpath, "")
+    (_, False) -> throwStrErr "toWorktreePath" $ "path not in worktree: " <> path
+    _ -> (fullpath, relative)

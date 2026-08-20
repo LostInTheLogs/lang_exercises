@@ -4,7 +4,7 @@ import Data.List (stripPrefix)
 import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import qualified Data.Vector.Strict as V
+import qualified Data.Vector as V
 import HGit.GitDiffIndex (IndexTreeDiff (..), diffTreeIndex)
 import HGit.Ignore (listRepoFilesRecursive)
 import HGit.Index (EntryStatus (..), IndexEntries, IndexEntry (..), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)

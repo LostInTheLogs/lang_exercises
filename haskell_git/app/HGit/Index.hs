@@ -11,6 +11,7 @@ module HGit.Index (
   getEntryStatus,
   fileToEntry,
   makeEntry,
+  findEntryByPath,
   Index (..),
   IndexEntry (..),
   IndexEntries,
@@ -20,6 +21,7 @@ module HGit.Index (
 
 import Control.Applicative (many)
 import Control.Monad (when)
+import Control.Monad.ST (runST)
 import qualified Control.Monad.Writer.Strict as W
 import qualified Data.Attoparsec.Binary as AB
 import qualified Data.Attoparsec.ByteString.Char8 as A8
@@ -33,12 +35,13 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.String
-import qualified Data.Vector.Strict as V
+import qualified Data.Vector as V
+import qualified Data.Vector.Algorithms.Search as VS
 import Data.Word (Word32)
 import Debug.Trace (trace)
 import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, getFileHash, makeObject)
 import HGit.ObjectType (Hash (hashBS), hashLazy)
-import HGit.Repository (Repository, WithRepository, gitPath, worktreePath)
+import HGit.Repository (Repository, WithRepository, WorkTreePath, gitPath, worktreePath)
 import HGit.Tree (FileMode (..))
 import HGit.Utils (insertManySorted, nameParser, runParserUnsafe, throwErr)
 import Relude
@@ -65,7 +68,7 @@ data IndexEntry = IndexEntry
   , ieObjHash :: Hash
   , ieFlags :: Word16
   , ieExtFlags :: Maybe Word16
-  , iePath :: FilePath
+  , iePath :: WorkTreePath
   }
   deriving (Show)
 
@@ -81,7 +84,7 @@ type IndexEntries = V.Vector IndexEntry
 
 data Index = Index
   { idxVersion :: Word32
-  , idxEntries :: IndexEntries -- sorted by hash
+  , idxEntries :: IndexEntries -- sorted by path
   , idxExtensions :: [IndexExtension]
   }
   deriving (Show)
@@ -293,3 +296,24 @@ getEntryStatus entry = do
         then return Nothing
         else return $ Just (EntryModified, entry)
     Nothing -> return $ Just (EntryDeleted, entry)
+
+-- isEntryInPath :: FilePath -> IndexEntry -> Bool
+-- isEntryInPath relPath IndexEntry{..} = iePath == relPath || (relPath ++ "/") `isPrefixOf` iePath
+--
+-- filterEntriesUnderPath :: IndexEntries -> FilePath -> IndexEntries
+-- filterEntriesUnderPath entries relPath = runST $ do
+--   mEntries <- V.unsafeThaw entries
+--   startIdx <- VS.binarySearchLBy (\a _ -> compare (iePath a) relPath) mEntries (error "unused")
+--
+--   let subVec = V.drop startIdx entries
+--   let matching = V.takeWhile (isEntryInPath relPath) subVec
+--   return matching
+
+findEntryByPath :: IndexEntries -> FilePath -> Maybe IndexEntry
+findEntryByPath entries relPath = runST $ do
+  mEntries <- V.unsafeThaw entries
+  startIdx <- VS.binarySearchBy (\a _ -> compare (iePath a) relPath) mEntries (error "_")
+  let found = entries V.! startIdx
+  if iePath found == relPath
+    then return $ Just found
+    else return Nothing

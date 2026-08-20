@@ -4,12 +4,12 @@ module HGit.GitAdd (gitAdd, AddOptions (..)) where
 
 import qualified Data.List as List
 import qualified Data.Set as Set
-import qualified Data.Vector.Strict as V
+import qualified Data.Vector as V
 import HGit.Ignore (listRepoFilesRecursive)
 import HGit.Index (Index (..), IndexEntry (..), fileToEntry, makeEntry, readIndex, writeIndex)
 import HGit.Object (ObjType (BlobObj), Object (objHash), writeObj)
 import HGit.ObjectType (makeObject)
-import HGit.Repository (Repository (..), gitPath, runWithFoundRepo, worktreePath')
+import HGit.Repository (Repository (..), WithRepository, gitPath, runWithFoundRepo, toWorktreePath, worktreePath')
 import HGit.Utils (insertManySorted, throwErr, throwStrErr)
 import Relude
 import System.FilePath (pathSeparator)
@@ -19,12 +19,7 @@ data AddOptions = AddOptions {optPath :: FilePath}
 
 gitAdd :: AddOptions -> IO ()
 gitAdd AddOptions{..} = runWithFoundRepo $ do
-  path <- Dir.canonicalizePath optPath
-  worktreePath <- asks repoWorktree
-  let relPath = case List.stripPrefix worktreePath path of
-        Just a -> fromMaybe a $ List.stripPrefix [pathSeparator] a
-        Nothing -> throwErr "gitAdd" "path not in worktree"
-
+  (path, relPath) <- toWorktreePath optPath
   idx <- readIndex
 
   fileExists <- Dir.doesFileExist path

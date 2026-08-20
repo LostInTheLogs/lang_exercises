@@ -31,7 +31,7 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSCL8
 import qualified Data.List as List (stripPrefix)
-import qualified Data.Vector.Strict as V
+import qualified Data.Vector as V
 import HGit.ObjectType
 import HGit.Packfile
 import HGit.Repository (Repository, WithRepository, gitPath, objectsPath)

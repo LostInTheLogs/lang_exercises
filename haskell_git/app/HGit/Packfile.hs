@@ -9,7 +9,7 @@ import qualified Data.Bits as Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Vector.Strict as V
+import qualified Data.Vector as V
 import HGit.ObjectType
 import HGit.Repository (WithRepository, objectsPath)
 import HGit.Utils

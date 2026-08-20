@@ -1,7 +1,7 @@
 module HGit.GitDiffIndex (gitDiffIndex, DiffIndexOptions (..), IndexTreeDiff (..), diffTreeIndex) where
 
 import Data.Map as Map
-import qualified Data.Vector.Strict as V
+import qualified Data.Vector as V
 import HGit.Index (Index (..), IndexEntries, IndexEntry (..), getEntryHash, getStatData, isEntryModified, readIndex)
 import HGit.Object (Hash, ObjType (CommitObj, TreeObj), findObject, getFileHash, objPayload, readObj, strToHash)
 import HGit.ObjectCoerce (findAndCoerceObj)

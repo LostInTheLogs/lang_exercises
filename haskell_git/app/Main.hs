@@ -5,6 +5,8 @@ module Main (main) where
 
 import HGit.GitAdd
 import HGit.GitCatFile
+import HGit.GitCheckout
+import HGit.GitCheckoutIndex
 import HGit.GitDiffIndex
 import HGit.GitHashObject
 import HGit.GitInit
@@ -79,6 +81,18 @@ addParser =
     optPath <- argument str (metavar "PATH" <> help "Path to file(s)")
     pure (AddOptions{..})
 
+checkoutIndexParser :: Parser (IO ())
+checkoutIndexParser =
+  gitCheckoutIndex <$> do
+    optFiles <- many (argument str (metavar "FILES..." <> help "Files to checkout"))
+    pure (CheckoutIndexOptions{..})
+
+checkoutParser :: Parser (IO ())
+checkoutParser =
+  gitCheckout <$> do
+    optBranch <- argument str (metavar "BRANCH" <> help "Branch to checkout")
+    pure (CheckoutOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -97,3 +111,5 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "diff-index" (info diffIndexParser (progDesc "compare content and mode of blobs between index and repository"))
         <> command "status" (info statusParser (progDesc "show working-tree status"))
         <> command "add" (info addParser (progDesc "add file to index"))
+        <> command "checkout-index" (info checkoutIndexParser (progDesc "copy files from index to working directory" <> footer "Doesn't overwrite existing files"))
+        <> command "checkout" (info checkoutParser (progDesc "checkout branch or paths to working tree"))
