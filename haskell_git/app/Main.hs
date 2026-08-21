@@ -16,6 +16,8 @@ import HGit.GitLsTree
 import HGit.GitStatus
 
 import Control.Monad (join)
+import HGit.GitReadTree
+import HGit.GitReset
 import HGit.Object (ObjType, deserializeObjType)
 import Options.Applicative
 import Relude
@@ -93,6 +95,23 @@ checkoutParser =
     optBranch <- argument str (metavar "BRANCH" <> help "Branch to checkout")
     pure (CheckoutOptions{..})
 
+readTreeParser :: Parser (IO ())
+readTreeParser =
+  gitReadTree <$> do
+    optTree <- argument str (metavar "TREE" <> help "Tree to read into index")
+    pure (ReadTreeOptions{..})
+
+resetParser :: Parser (IO ())
+resetParser =
+  gitReset <$> do
+    optMode <-
+      flag' ResetSoft (long "soft" <> help "Soft reset")
+        <|> flag' ResetMixed (long "mixed" <> help "Mixed reset (default)")
+        <|> flag' ResetHard (long "hard" <> help "Hard reset")
+        <|> pure ResetMixed
+    optRef <- argument str (metavar "BRANCH" <> help "Branch to reset")
+    pure (ResetOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -102,7 +121,7 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
   parser :: Parser (IO ())
   parser =
     hsubparser $
-      command "init" (info initParser (progDesc "Create an empty git repository"))
+      command "init" (info initParser (progDesc "create an empty git repository"))
         <> command "hash-object" (info hashObjectParser (progDesc "compute object ID"))
         <> command "cat-file" (info catFileParser (progDesc "provide contents or details of repository objects"))
         <> command "log" (info logParser (progDesc "show commit log"))
@@ -113,3 +132,5 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "add" (info addParser (progDesc "add file to index"))
         <> command "checkout-index" (info checkoutIndexParser (progDesc "copy files from index to working directory" <> footer "Doesn't overwrite existing files"))
         <> command "checkout" (info checkoutParser (progDesc "checkout branch or paths to working tree"))
+        <> command "reset" (info resetParser (progDesc "set `Head` or the index to a known state"))
+        <> command "read-tree" (info readTreeParser (progDesc "read tree information into directory index"))

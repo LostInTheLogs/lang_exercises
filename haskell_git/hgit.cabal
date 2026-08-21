@@ -23,6 +23,8 @@ executable hgit
       HGit.GitLog
       HGit.GitLsFiles
       HGit.GitLsTree
+      HGit.GitReadTree
+      HGit.GitReset
       HGit.GitStatus
       HGit.Ignore
       HGit.Index

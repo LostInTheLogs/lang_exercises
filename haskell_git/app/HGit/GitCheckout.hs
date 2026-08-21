@@ -59,14 +59,6 @@ data CheckoutOptions = CheckoutOptions {optBranch :: Text}
 
 gitCheckout :: CheckoutOptions -> IO ()
 gitCheckout CheckoutOptions{..} = runWithFoundRepo $ do
-  let branchRef = "refs/heads/" <> optBranch
-
-  branchExists <- Dir.doesFileExist =<< gitPath [toString branchRef]
-  newHead <-
-    if branchExists
-      then return $ "ref: " <> branchRef
-      else show <$> findObject optBranch
-
   tree <- objToTree <$> findAndCoerceObj TreeObj optBranch
   flattened <- flattenTree tree
 
@@ -91,12 +83,5 @@ gitCheckout CheckoutOptions{..} = runWithFoundRepo $ do
     putTextLn "Aborting"
     exitFailure
 
-  putTextLn "new head:"
-  putTextLn newHead
-
--- get all files from the `branch` tree, convert to index entries
--- untracked_from_tree = tree - index
--- if one of the untracked_from_tree files currently exists on disk, abort
--- delete all files in index, if already deleted ignore, delete directories if empty and were tracked, somehow
--- switch out index entries
--- checkout the index
+  -- TODO: git reset hard
+  return ()

@@ -12,6 +12,7 @@ module HGit.Index (
   fileToEntry,
   makeEntry,
   findEntryByPath,
+  makeBlankEntry,
   Index (..),
   IndexEntry (..),
   IndexEntries,
@@ -34,6 +35,7 @@ import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
+import Data.Char (isUpperCase)
 import qualified Data.String
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Search as VS
@@ -185,7 +187,11 @@ indexParser = nameParser "indexParser" $ do
   when (idxVersion /= 2) $ throwErr "indexParser" "unsupported index version"
   len <- AB.anyWord32be
   idxEntries <- V.generateM (fromIntegral len) (const indexEntryParser)
-  idxExtensions <- many extensionParser
+  extensions <- many extensionParser
+
+  -- filter out optional
+  let idxExtensions = filter (not . isUpperCase . BSC8.head . extSig) extensions
+
   _hash <- byteHashParser
   _ <- A.endOfInput
   return Index{..}
@@ -244,6 +250,25 @@ fileToEntry iePath = do
   ieObjHash <- getFileHash path
   makeEntry iePath path ieObjHash
 
+blankFileStat :: FileStat
+blankFileStat =
+  FileStat
+    { statDataModified = (0, 0)
+    , statMDataModified = (0, 0)
+    , statDev = 0
+    , statIno = 0
+    , statUid = 0
+    , statGid = 0
+    , statSize = 0
+    }
+
+makeBlankEntry :: WorkTreePath -> Hash -> FileMode -> IndexEntry
+makeBlankEntry iePath ieObjHash ieMode = do
+  let ieStat = blankFileStat
+  let ieFlags = fromIntegral $ length iePath
+  let ieExtFlags = Nothing
+  IndexEntry{..}
+
 makeEntry :: FilePath -> FilePath -> Hash -> WithRepository IndexEntry
 makeEntry iePath path hash = do
   let ieObjHash = hash
@@ -275,6 +300,7 @@ isEntryModified entry = do
 
 getEntryHash :: IndexEntry -> WithRepository (Maybe Hash)
 getEntryHash entry = do
+  -- TODO:  if hash equal, update stat data
   filePath <- worktreePath [iePath entry]
   fileExists <- Dir.doesFileExist filePath
   if fileExists
