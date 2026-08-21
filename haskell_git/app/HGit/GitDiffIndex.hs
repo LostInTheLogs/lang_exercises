@@ -1,18 +1,29 @@
-module HGit.GitDiffIndex (gitDiffIndex, DiffIndexOptions (..), IndexTreeDiff (..), diffTreeIndex) where
+module HGit.GitDiffIndex (
+  gitDiffIndex,
+  DiffIndexOptions (..),
+  IndexTreeDiff (..),
+  diffTreeIndex,
+  treeIndexDiffToPath,
+) where
 
 import Data.Map as Map
 import qualified Data.Vector as V
 import HGit.FindObject (findAndCoerceObj)
 import HGit.Index (Index (..), IndexEntries, IndexEntry (..), getEntryHash, getStatData, isEntryModified, readIndex)
 import HGit.Object (Hash, ObjType (CommitObj, TreeObj), getFileHash, objPayload, readObj, strToHash)
-import HGit.Repository (Repository, WithRepository, runWithFoundRepo, worktreePath)
+import HGit.Repository (Repository, WithRepository, WorkTreePath, runWithFoundRepo, worktreePath)
 import HGit.Tree (Tree, TreeItem (..), flattenTree, objToTree)
 import Relude
 import qualified UnliftIO.Directory as Dir
 
 data DiffIndexOptions = DiffIndexOptions {optTree :: Text, optCached :: Bool}
 
-data IndexTreeDiff = ITDAdded IndexEntry | ITDDeleted (FilePath, TreeItem) | ITDModified TreeItem IndexEntry deriving (Show)
+data IndexTreeDiff = ITDAdded IndexEntry | ITDDeleted (WorkTreePath, TreeItem) | ITDModified TreeItem IndexEntry deriving (Show)
+
+treeIndexDiffToPath :: IndexTreeDiff -> WorkTreePath
+treeIndexDiffToPath (ITDAdded entry) = iePath entry
+treeIndexDiffToPath (ITDDeleted (path, _)) = path
+treeIndexDiffToPath (ITDModified _ entry) = iePath entry
 
 {-
 doesn't compare files not in index
