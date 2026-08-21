@@ -45,7 +45,7 @@ import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, g
 import HGit.ObjectType (Hash (hashBS), hashLazy)
 import HGit.Repository (Repository, WithRepository, WorkTreePath, gitPath, worktreePath)
 import HGit.Tree (FileMode (..))
-import HGit.Utils (insertManySorted, nameParser, runParserUnsafe, throwErr)
+import HGit.Utils (insertManySorted, nameParser, runParserUnsafe, throwErr, throwStrErr)
 import Relude
 import System.Directory (executable)
 import qualified System.Posix.Files as Files
@@ -191,6 +191,10 @@ indexParser = nameParser "indexParser" $ do
 
   -- filter out optional
   let idxExtensions = filter (not . isUpperCase . BSC8.head . extSig) extensions
+
+  unless (null idxExtensions) $
+    throwStrErr "indexParser" $
+      "unsupported extensions: " ++ show (BSC8.unpack . extSig <$> idxExtensions)
 
   _hash <- byteHashParser
   _ <- A.endOfInput
