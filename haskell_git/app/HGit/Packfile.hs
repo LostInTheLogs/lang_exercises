@@ -29,6 +29,7 @@ readPackObj objHash readObj = runMaybeT $ do
   let actions = MaybeT . findObjInPack objHash readObj <$> packIndexes
   asum actions
 
+-- TODO: cache
 findObjInPack :: Hash -> (Hash -> WithRepository Object) -> FilePath -> WithRepository (Maybe Object)
 findObjInPack objHash readObj idxPath = runMaybeT $ do
   raw <- readFileLBS idxPath
@@ -139,20 +140,35 @@ packIdxV2Parser :: A.Parser PackIndex
 packIdxV2Parser = nameParser "packIdxV2Parser" $ do
   _ <- AB.word32be idxV2Magic <?> "magic"
   _ <- AB.word32be 2
-  idxFanout <- V.replicateM 256 AB.anyWord32be <?> "fanout"
+
+  fanoutBlock <- A.take (256 * 4)
+  let idxFanout = V.generate 256 $ \i ->
+        word32beAt fanoutBlock (i * 4)
+
   let count = fromIntegral $ V.last idxFanout
-  idxObjectHashes <- V.replicateM count byteHashParser <?> "hashes"
+  hashBlock <- A.take (count * 20)
+  let idxObjectHashes = V.generate count $ \i ->
+        Hash (BS.take 20 (BS.drop (i * 20) hashBlock))
   _ <- A.take (4 * count) <?> "crc"
-  idxOffsets <- V.replicateM count AB.anyWord32be <?> "offsets"
+
+  offsetsBlock <- A.take (count * 4)
+  let idxOffsets = V.generate count $ \i ->
+        word32beAt offsetsBlock (i * 4)
 
   let largeOffsetCount = length $ V.filter (`Bits.testBit` 31) idxOffsets
   idxBigOffsets <- V.replicateM largeOffsetCount AB.anyWord64be <?> "large offsets"
-  --
 
   idxPackChecksum <- byteHashParser
   idxChecksum <- byteHashParser
   _ <- A.endOfInput <?> "eof"
   return PackIndex{..}
+ where
+  word32beAt :: BS.ByteString -> Int -> Word32
+  word32beAt bs i =
+    (fromIntegral (BS.index bs i) `Bits.shiftL` 24)
+      .|. (fromIntegral (BS.index bs (i + 1)) `Bits.shiftL` 16)
+      .|. (fromIntegral (BS.index bs (i + 2)) `Bits.shiftL` 8)
+      .|. fromIntegral (BS.index bs (i + 3))
 
 data PackDeltaInstr = PDCopy Int64 Int64 | PBInsert BS.ByteString deriving (Show)
 data PackDelta = PackDelta {pdBaseSize :: Int64, pdObjSize :: Int64, pdInstrs :: [PackDeltaInstr]} deriving (Show)

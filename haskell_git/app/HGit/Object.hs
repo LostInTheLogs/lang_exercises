@@ -34,7 +34,7 @@ import qualified Data.Vector as V
 import HGit.ObjectType
 import HGit.Packfile
 import HGit.Repository (Repository, WithRepository, gitPath, objectsPath)
-import HGit.Utils (binarySearch, fReadBSLine, fReadStrLine, nameParser, note, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
+import HGit.Utils (binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
 import Relude
 import qualified Relude.File as File
 import System.FilePath ((</>))

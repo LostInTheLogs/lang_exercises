@@ -1,6 +1,5 @@
 module HGit.Utils (
   putStrErrLn,
-  note,
   fReadTxtLine,
   fReadStrLine,
   fReadBSLine,
@@ -32,16 +31,15 @@ import qualified Prelude as P (error)
 putStrErrLn :: [Char] -> IO ()
 putStrErrLn err = putStrLn $ "Error: " ++ err
 
--- | Tag the 'Nothing' value of a 'Maybe'
-note :: a -> Maybe b -> Either a b
-note a = maybe (Left a) Right
-
+{-# INLINE fReadTxtLine #-}
 fReadTxtLine :: (MonadIO m) => FilePath -> m Text
 fReadTxtLine path = liftIO $ withFile path ReadMode TIO.hGetLine
 
+{-# INLINE fReadStrLine #-}
 fReadStrLine :: (MonadIO m) => FilePath -> m String
 fReadStrLine path = liftIO $ withFile path ReadMode IO.hGetLine
 
+{-# INLINE fReadBSLine #-}
 fReadBSLine :: (MonadIO m) => FilePath -> m ByteString
 fReadBSLine path = liftIO $ withFile path ReadMode BSC8.hGetLine
 
@@ -85,5 +83,6 @@ binarySearch vec target = loop 0 (V.length vec - 1)
 insertManySorted :: (Ord a) => V.Vector a -> V.Vector a -> V.Vector a
 insertManySorted large small = V.modify VS.sort (large V.++ small)
 
+{-# INLINE nameParser #-}
 nameParser :: String -> A.Parser a -> A.Parser a
 nameParser name parser = parser <?> name
