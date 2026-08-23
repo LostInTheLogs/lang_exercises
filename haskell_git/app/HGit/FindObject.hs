@@ -5,6 +5,7 @@ module HGit.FindObject (
   findBranch,
   coerceObjTo,
   findAndCoerceObj,
+  findAndCoerceToTree,
 ) where
 
 import Control.Monad.Extra (firstJustM)
@@ -13,6 +14,7 @@ import qualified Data.List as List
 import HGit.Commit (Commit (..), objToCommit)
 import HGit.Object (Hash (..), ObjType (..), Object (..), readObj, readObjOfType, strToHash)
 import HGit.Repository (Repository, WithRepository, gitPath)
+import HGit.Tree (Tree, objToTree)
 import HGit.Utils
 import Relude
 import qualified UnliftIO.Directory as Dir
@@ -59,3 +61,6 @@ coerceObjTo toType obj
 
 findAndCoerceObj :: ObjType -> Text -> WithRepository Object
 findAndCoerceObj oType ref = coerceObjTo oType =<< readObj =<< findObject ref
+
+findAndCoerceToTree :: Text -> WithRepository Tree
+findAndCoerceToTree ref = objToTree <$> findAndCoerceObj TreeObj ref

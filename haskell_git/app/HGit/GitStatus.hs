@@ -6,20 +6,20 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import HGit.FindObject (findAndCoerceObj)
-import HGit.GitDiffIndex (IndexTreeDiff (..), diffTreeIndex)
+import HGit.GitDiffIndex (diffTreeIndex)
 import HGit.Ignore (listRepoFilesRecursive)
-import HGit.Index (EntryStatus (..), IndexEntries, IndexEntry (..), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)
+import HGit.Index (EntryStatus (..), IndexEntries, IndexEntry (..), TreeIndexDiff (DiffModified, DiffOnlyInIndex, DiffOnlyInTree), getEntryHash, getEntryStatus, idxEntries, isEntryModified, readIndex)
 import HGit.Object (ObjType (..))
 import HGit.Repository (Repository (repoWorktree), WithRepository, gitPath, runWithFoundRepo, worktreePath)
-import HGit.Tree (objToTree)
+import HGit.Tree (flattenTree, objToTree)
 import HGit.Utils (fReadStrLine, throwErr)
 import Relude
 
 data StatusOptions = StatusOptions {}
 
-getStagedChanges :: IndexEntries -> WithRepository [IndexTreeDiff]
+getStagedChanges :: IndexEntries -> WithRepository [TreeIndexDiff]
 getStagedChanges entries = do
-  tree <- objToTree <$> findAndCoerceObj TreeObj "HEAD"
+  tree <- flattenTree . objToTree =<< findAndCoerceObj TreeObj "HEAD"
   diffTreeIndex tree entries True
 
 gitStatus :: StatusOptions -> IO ()
@@ -54,23 +54,24 @@ gitStatus StatusOptions{} = runWithFoundRepo $ do
   when (null staged && null unstaged) $ putStrLn "nothing to commit, working tree clean"
   when (null staged && not (null unstaged)) $ putStrLn "no changes added to commit (use \"git add\" and/or \"git commit -a\")"
 
-printStaged :: IndexTreeDiff -> IO ()
+printStaged :: TreeIndexDiff -> IO ()
 printStaged diff =
   liftIO $
     putStr "  \t" *> case diff of
-      ITDAdded entry -> do
+      DiffOnlyInIndex entry -> do
         putStr "new file:   "
         putStrLn $ iePath entry
-      ITDDeleted (path, _item) -> do
+      DiffOnlyInTree (path, _item) -> do
         putStr "deleted:    "
         putStrLn path
-      ITDModified _item entry -> do
+      DiffModified _item entry -> do
         putStr "modified:   "
         putStrLn $ iePath entry
+      _ -> error "a"
 
 printUnstaged :: (EntryStatus, IndexEntry) -> IO ()
 printUnstaged (status, entry) = do
-  putStr "  \t"
+  putStr "\t"
   putStr $ case status of
     EntryModified -> "modified:   "
     EntryDeleted -> "deleted:    "
@@ -78,7 +79,7 @@ printUnstaged (status, entry) = do
 
 printUntracked :: FilePath -> IO ()
 printUntracked path = do
-  putStr "  \t"
+  putStr "\t"
   putStrLn path
 
 getBranch :: WithRepository String

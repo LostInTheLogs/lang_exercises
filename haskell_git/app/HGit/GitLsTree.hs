@@ -11,19 +11,17 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.IO as TIO
-import HGit.FindObject (findAndCoerceObj)
-import HGit.Object (ObjType (CommitObj, TreeObj), objPayload, readObj, strToHash)
+import HGit.FindObject (findAndCoerceToTree)
+import HGit.Object (ObjType (CommitObj, TreeObj))
 import HGit.Repository (Repository, runWithFoundRepo)
-import HGit.Tree (FileMode (..), Tree (..), TreeItem (..), flattenTree, modeToStr, objToTree, readTree)
-import HGit.Utils (throwErr)
+import HGit.Tree (FileMode (..), Tree (..), TreeItem (..), flattenTree, modeToStr)
 import Relude
-import System.FilePath (pathSeparator, (</>))
 
 data LsTreeOptions = LsTreeOptions {optRef :: Text, optRecurse :: Bool}
 
 gitLsTree :: LsTreeOptions -> IO ()
 gitLsTree LsTreeOptions{..} = runWithFoundRepo $ do
-  tree <- objToTree <$> findAndCoerceObj TreeObj optRef
+  tree <- findAndCoerceToTree optRef
   flattened <-
     if optRecurse
       then flattenTree tree
@@ -44,5 +42,5 @@ printTreeItem (path, TreeItem{..}) = liftIO $ do
   putStr typeStr
   putStr " "
   putStr $ show tiHash
-  putStr "    "
+  putStr "\t"
   putStrLn path

@@ -6,6 +6,7 @@ module HGit.Tree (
   Tree (..),
   TreeItem (..),
   FileMode (..),
+  FlattenedTree,
 ) where
 
 import qualified Data.Attoparsec.ByteString.Char8 as A8
@@ -18,7 +19,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import qualified Data.String
 import HGit.Object (Hash, ObjType (TreeObj), Object (..), byteHashParser, readObj, readObjOfType)
-import HGit.Repository (Repository, WithRepository (WithRepository), gitPath)
+import HGit.Repository (Repository, WithRepository (WithRepository), WorkTreePath, gitPath)
 import HGit.Utils (fReadStrLine, nameParser, runParserUnsafe, throwErr)
 import Relude
 import System.FilePath ((</>))
@@ -81,11 +82,15 @@ readTree hash = do
   Object{..} <- readObjOfType TreeObj hash
   return $ runParserUnsafe (treeParser hash) objPayload
 
-flattenTree :: Tree -> WithRepository [(FilePath, TreeItem)]
-flattenTree tree = concat <$> mapM go (treeItems tree)
+type FlattenedTree = [(FilePath, TreeItem)]
+
+flattenTree :: Tree -> WithRepository FlattenedTree
+flattenTree tree = reverse <$> go "" (treeItems tree) []
  where
-  go :: TreeItem -> WithRepository [(FilePath, TreeItem)]
-  go dir@TreeItem{tiMode = Directory, tiHash = treeHash} = do
-    items <- flattenTree =<< readTree treeHash
-    return $ first (tiName dir </>) <$> items
-  go item = return [(tiName item, item)]
+  go :: WorkTreePath -> [TreeItem] -> FlattenedTree -> WithRepository FlattenedTree
+  go _ [] acc = return acc
+  go path (dir@TreeItem{tiMode = Directory, tiHash = treeHash} : rest) acc = do
+    newTree <- readTree treeHash
+    newAcc <- go (path </> tiName dir) (treeItems newTree) acc
+    go path rest newAcc
+  go path (item : rest) acc = go path rest $ (path </> tiName item, item) : acc

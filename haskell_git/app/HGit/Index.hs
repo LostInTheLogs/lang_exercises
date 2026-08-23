@@ -1,6 +1,4 @@
-{-# LANGUAGE BinaryLiterals #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module HGit.Index (
   readIndex,
@@ -18,6 +16,10 @@ module HGit.Index (
   IndexEntries,
   EntryStatus (..),
   FileMode (..),
+  treeIndexFoldlM,
+  TreeIndexFold (..),
+  treeIndexDiffFoldlM,
+  TreeIndexDiff (..),
 ) where
 
 import Control.Applicative (many)
@@ -44,10 +46,11 @@ import Debug.Trace (trace)
 import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, getFileHash, makeObject)
 import HGit.ObjectType (Hash (hashBS), hashLazy)
 import HGit.Repository (Repository, WithRepository, WorkTreePath, gitPath, worktreePath)
-import HGit.Tree (FileMode (..))
+import HGit.Tree (FileMode (..), Tree (treeItems), TreeItem (..), readTree)
 import HGit.Utils (insertManySorted, nameParser, runParserUnsafe, throwErr, throwStrErr)
 import Relude
 import System.Directory (executable)
+import System.FilePath.Posix ((</>))
 import qualified System.Posix.Files as Files
 import qualified UnliftIO.Directory as Dir
 
@@ -111,6 +114,7 @@ indexEntryParser = nameParser "indexEntryParser" $ do
   statMDataModified <- ((,) <$> AB.anyWord32be <*> AB.anyWord32be) <?> "mmod"
   statDev <- AB.anyWord32be <?> "dev"
   statIno <- AB.anyWord32be <?> "ino"
+
   _ <- AB.word16be 0 <?> "null"
   packed <- AB.anyWord16be
   let mode = packed `Bits.shiftR` 12
@@ -121,6 +125,7 @@ indexEntryParser = nameParser "indexEntryParser" $ do
         (0b1010, _) -> Symlink
         (0b1110, _) -> Gitlink
         _ -> throwErr "indexEntryParser" "unknown mode"
+
   statUid <- AB.anyWord32be
   statGid <- AB.anyWord32be
   statSize <- AB.anyWord32be
@@ -148,7 +153,6 @@ entryBuilder IndexEntry{..} = W.execWriter $ do
   W.tell $ modifiedBuilder statMDataModified
   W.tell $ B.word32BE statDev
   W.tell $ B.word32BE statIno
-  W.tell $ B.word16BE 0
 
   let (mode, perms) = case ieMode of
         RegularFile -> (0b1000, 0o644)
@@ -157,6 +161,7 @@ entryBuilder IndexEntry{..} = W.execWriter $ do
         Gitlink -> (0b1110, 0)
         Directory -> throwErr "entryBuilder" "unexpected directory entry"
   let packed = perms .|. (mode `Bits.shiftL` 12)
+  W.tell $ B.word16BE 0
   W.tell $ B.word16BE packed
 
   W.tell $ B.word32BE statUid
@@ -347,3 +352,59 @@ findEntryByPath entries relPath = runST $ do
   if iePath found == relPath
     then return $ Just found
     else return Nothing
+
+data TreeIndexFold = OnlyInTree (WorkTreePath, TreeItem) | InBoth TreeItem IndexEntry | OnlyInIndex IndexEntry deriving (Show)
+
+treeIndexFoldlM ::
+  forall a.
+  [(WorkTreePath, TreeItem)] ->
+  IndexEntries ->
+  a ->
+  (a -> TreeIndexFold -> WithRepository a) ->
+  WithRepository a
+treeIndexFoldlM treeItems indexEntries startAcc fun = work treeItems 0 startAcc
+ where
+  entriesLen = length indexEntries
+  work :: [(WorkTreePath, TreeItem)] -> Int -> a -> WithRepository a
+
+  -- index entries depleted
+  work items idx acc | idx >= entriesLen = do
+    foldlM fun acc (OnlyInTree <$> items)
+  -- tree items depleted
+  work [] idx acc = do
+    foldlM fun acc (OnlyInIndex <$> V.drop idx indexEntries)
+  work items@(item : itemsTail) idx acc = do
+    let entry = indexEntries `V.unsafeIndex` idx
+    case compare (fst item) (iePath entry) of
+      LT -> do
+        newAcc <- fun acc $ OnlyInTree item
+        work itemsTail idx newAcc
+      EQ -> do
+        newAcc <- fun acc $ InBoth (snd item) entry
+        work itemsTail (idx + 1) newAcc
+      GT -> do
+        newAcc <- fun acc $ OnlyInIndex entry
+        work items (idx + 1) newAcc
+
+data TreeIndexDiff = DiffOnlyInTree (WorkTreePath, TreeItem) | DiffModified TreeItem IndexEntry | DiffSame TreeItem IndexEntry | DiffOnlyInIndex IndexEntry deriving (Show)
+
+treeIndexDiffFoldlM ::
+  forall a.
+  [(WorkTreePath, TreeItem)] ->
+  IndexEntries ->
+  Bool ->
+  a ->
+  (a -> TreeIndexDiff -> WithRepository a) ->
+  WithRepository a
+treeIndexDiffFoldlM treeItems indexEntries cached startAcc fun = treeIndexFoldlM treeItems indexEntries startAcc $
+  \acc i -> case i of
+    OnlyInTree item -> fun acc $ DiffOnlyInTree item
+    OnlyInIndex entry -> fun acc $ DiffOnlyInIndex entry
+    InBoth item entry -> do
+      newHash <- if cached then return $ Just $ ieObjHash entry else getEntryHash entry
+      case newHash of
+        Just hash ->
+          if tiHash item == hash
+            then fun acc $ DiffSame item entry
+            else fun acc $ DiffModified item entry
+        Nothing -> fun acc $ DiffOnlyInTree (iePath entry, item)

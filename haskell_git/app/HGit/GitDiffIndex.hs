@@ -1,29 +1,20 @@
 module HGit.GitDiffIndex (
   gitDiffIndex,
   DiffIndexOptions (..),
-  IndexTreeDiff (..),
   diffTreeIndex,
-  treeIndexDiffToPath,
 ) where
 
 import Data.Map as Map
 import qualified Data.Vector as V
 import HGit.FindObject (findAndCoerceObj)
-import HGit.Index (Index (..), IndexEntries, IndexEntry (..), getEntryHash, getStatData, isEntryModified, readIndex)
+import HGit.Index (Index (..), IndexEntries, IndexEntry (..), TreeIndexDiff (..), getEntryHash, getStatData, isEntryModified, readIndex, treeIndexDiffFoldlM)
 import HGit.Object (Hash, ObjType (CommitObj, TreeObj), getFileHash, objPayload, readObj, strToHash)
 import HGit.Repository (Repository, WithRepository, WorkTreePath, runWithFoundRepo, worktreePath)
-import HGit.Tree (Tree, TreeItem (..), flattenTree, objToTree)
+import HGit.Tree (FlattenedTree, Tree, TreeItem (..), flattenTree, objToTree)
 import Relude
 import qualified UnliftIO.Directory as Dir
 
 data DiffIndexOptions = DiffIndexOptions {optTree :: Text, optCached :: Bool}
-
-data IndexTreeDiff = ITDAdded IndexEntry | ITDDeleted (WorkTreePath, TreeItem) | ITDModified TreeItem IndexEntry deriving (Show)
-
-treeIndexDiffToPath :: IndexTreeDiff -> WorkTreePath
-treeIndexDiffToPath (ITDAdded entry) = iePath entry
-treeIndexDiffToPath (ITDDeleted (path, _)) = path
-treeIndexDiffToPath (ITDModified _ entry) = iePath entry
 
 {-
 doesn't compare files not in index
@@ -38,49 +29,27 @@ If Path exists in both (M):
 gitDiffIndex :: DiffIndexOptions -> IO ()
 gitDiffIndex DiffIndexOptions{..} = runWithFoundRepo $ do
   idxEntries <- idxEntries <$> readIndex
-  tree <- objToTree <$> findAndCoerceObj TreeObj optTree
+  tree <- flattenTree . objToTree =<< findAndCoerceObj TreeObj optTree
   diffs <- diffTreeIndex tree idxEntries optCached
   mapM_ printDiff diffs
 
-diffTreeIndex :: Tree -> IndexEntries -> Bool -> WithRepository [IndexTreeDiff]
-diffTreeIndex tree idxEntries cached = do
-  flattenedTree <- flattenTree tree
-  work (Map.fromList flattenedTree) 0 []
- where
-  work :: Map.Map FilePath TreeItem -> Int -> [IndexTreeDiff] -> WithRepository [IndexTreeDiff]
-  work treeMap idx acc
-    | Map.null treeMap =
-        let rest = V.drop idx idxEntries
-         in return $ reverse acc ++ V.toList (ITDAdded <$> rest)
-    | idx >= V.length idxEntries =
-        return $ reverse acc ++ (ITDDeleted <$> Map.toList treeMap)
-    | otherwise = do
-        let entry = idxEntries V.! idx
-        case treeMap Map.!? iePath entry of
-          Just treeItem -> do
-            let newMap = Map.delete (iePath entry) treeMap
-            work newMap (idx + 1) =<< handleDiff treeItem entry acc
-          Nothing ->
-            work treeMap (idx + 1) (ITDAdded entry : acc)
+diffTreeIndex :: FlattenedTree -> IndexEntries -> Bool -> WithRepository [TreeIndexDiff]
+diffTreeIndex tree idxEntries cached =
+  reverse <$> do
+    treeIndexDiffFoldlM tree idxEntries cached [] $ \acc x ->
+      case x of
+        DiffSame _ _ -> return acc
+        _ -> return $ x : acc
 
-  handleDiff :: TreeItem -> IndexEntry -> [IndexTreeDiff] -> WithRepository [IndexTreeDiff]
-  handleDiff treeItem entry acc = do
-    newHash <- if cached then return $ Just $ ieObjHash entry else getEntryHash entry
-    case newHash of
-      Just hash ->
-        if tiHash treeItem == hash
-          then return acc
-          else return $ ITDModified treeItem entry : acc
-      Nothing -> return $ ITDDeleted (iePath entry, treeItem) : acc
-
-printDiff :: (MonadIO m) => IndexTreeDiff -> m ()
+printDiff :: (MonadIO m) => TreeIndexDiff -> m ()
 printDiff diff = liftIO $ case diff of
-  ITDAdded entry -> do
+  DiffOnlyInIndex entry -> do
     putStr "A     "
     putStrLn $ iePath entry
-  ITDDeleted (path, _item) -> do
+  DiffOnlyInTree (path, _item) -> do
     putStr "D     "
     putStrLn path
-  ITDModified _item entry -> do
+  DiffModified _item entry -> do
     putStr "M     "
     putStrLn $ iePath entry
+  _ -> error "unexpected TreeIndexDiff"

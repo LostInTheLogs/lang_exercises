@@ -3,73 +3,43 @@
 module HGit.GitCheckout (gitCheckout, CheckoutOptions (..)) where
 
 import qualified Data.Vector as V
-import HGit.FindObject (findAndCoerceObj, findBranch, findObject)
-import HGit.GitDiffIndex (IndexTreeDiff, diffTreeIndex, treeIndexDiffToPath)
-import HGit.Index (Index (idxEntries), IndexEntries, IndexEntry (iePath), isEntryModified, readIndex)
-import HGit.Object (ObjType (..))
+import HGit.FindObject (findAndCoerceToTree)
+import HGit.GitDiffIndex (diffTreeIndex)
+import HGit.Index (Index (idxEntries), IndexEntries, IndexEntry (iePath), TreeIndexDiff (..), TreeIndexFold (..), isEntryModified, readIndex, treeIndexFoldlM)
 import HGit.Repository (WithRepository (WithRepository), WorkTreePath, gitPath, runWithFoundRepo, worktreePath')
-import HGit.Tree (flattenTree, objToTree)
+import HGit.Tree (FlattenedTree, flattenTree, objToTree)
 import HGit.Utils (throwErr)
 import Relude
 import qualified UnliftIO.Directory as Dir
 
--- error: The following untracked working tree files would be overwritten by checkout:
--- 	haskell_git/test
--- Please move or remove them before you switch branches.
--- Aborting
-
 -- | Returns untracked files that would be overwritten by checkout
-findUntrackedConflicts :: [WorkTreePath] -> IndexEntries -> WithRepository [WorkTreePath]
-findUntrackedConflicts files' entries' = work files' entries' []
- where
-  work :: [WorkTreePath] -> IndexEntries -> [WorkTreePath] -> WithRepository [WorkTreePath]
+findUntrackedConflicts :: FlattenedTree -> IndexEntries -> WithRepository [WorkTreePath]
+findUntrackedConflicts tree entries =
+  treeIndexFoldlM tree entries [] $ \acc x -> case x of
+    OnlyInTree (path, _) -> do
+      conflict <- Dir.doesFileExist =<< worktreePath' path
+      return $ if conflict then path : acc else acc
+    _ -> return acc
 
-  -- only in files, untracked
-  work files (V.null -> True) acc = do
-    newAcc <- filterM doesConflict files
-    return $ reverse acc ++ newAcc
-  -- only in index, tracked
-  work [] _ acc = do
-    return acc
-  work files@(file : filesTail) entries acc = do
-    let entry = V.unsafeHead entries
-    case compare file (iePath entry) of
-      -- only in files, untracked
-      LT -> do
-        conflict <- doesConflict file
-        let newAcc = if conflict then file : acc else acc
-        work filesTail entries newAcc
-      -- in both, tracked
-      EQ -> do
-        work filesTail (V.unsafeTail entries) acc
-      -- only in index, tracked
-      GT -> do
-        work files (V.unsafeTail entries) acc
-
-  doesConflict relPath = do
-    path <- worktreePath' relPath
-    Dir.doesFileExist path
-
-findTrackedConflicts :: IndexEntries -> WithRepository [WorkTreePath]
+findTrackedConflicts :: IndexEntries -> WithRepository [TreeIndexDiff]
 findTrackedConflicts entries = do
-  tree <- objToTree <$> findAndCoerceObj TreeObj "HEAD"
-  (treeIndexDiffToPath <$>) <$> diffTreeIndex tree entries False
+  tree <- flattenTree =<< findAndCoerceToTree "HEAD"
+  diffTreeIndex tree entries False
 
 data CheckoutOptions = CheckoutOptions {optBranch :: Text}
 
 gitCheckout :: CheckoutOptions -> IO ()
 gitCheckout CheckoutOptions{..} = runWithFoundRepo $ do
-  tree <- objToTree <$> findAndCoerceObj TreeObj optBranch
+  tree <- findAndCoerceToTree optBranch
   flattened <- flattenTree tree
-
   idx <- readIndex
 
-  untrackedConflicts <- findUntrackedConflicts (fst <$> flattened) (idxEntries idx)
+  untrackedConflicts <- findUntrackedConflicts flattened (idxEntries idx)
   trackedConflicts <- findTrackedConflicts (idxEntries idx)
 
   unless (null trackedConflicts) $ do
     putTextLn "error: Your local changes to the following files would be overwritten by checkout:"
-    forM_ trackedConflicts $ \x -> putStrLn ("\t" <> x)
+    forM_ (formatTrackedConflict <$> trackedConflicts) $ \x -> putStrLn ("\t" <> x)
     putTextLn "Please commit your changes or stash them before you switch branches."
     putTextLn ""
 
@@ -85,3 +55,11 @@ gitCheckout CheckoutOptions{..} = runWithFoundRepo $ do
 
   -- TODO: git reset hard
   return ()
+
+formatTrackedConflict :: TreeIndexDiff -> WorkTreePath
+formatTrackedConflict x =
+  case x of
+    DiffOnlyInIndex entry -> iePath entry
+    DiffOnlyInTree (path, _) -> path
+    DiffModified _ entry -> iePath entry
+    _ -> error "unexpected TreeIndexDiff"
