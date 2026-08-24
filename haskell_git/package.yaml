@@ -23,6 +23,7 @@ dependencies:
   - extra
   - unliftio
   - filepattern
+  - mmap
 
 executables:
   hgit:

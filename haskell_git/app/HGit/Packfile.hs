@@ -20,6 +20,7 @@ import HGit.Utils
 import Relude
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
+import qualified System.IO.MMap as MMap
 import qualified UnliftIO as IO
 import qualified UnliftIO.Directory as Dir
 
@@ -63,38 +64,38 @@ binarySearchHashStr hashes n hash = loop 0 (n - 1)
               EQ -> Just mid
   at x = BSU.unsafeTake 20 (BSU.unsafeDrop (x * 20) hashes)
 
-getIndex :: FilePath -> WithRepository PackIndex
-getIndex path = do
+getIndex :: FilePath -> WithRepository (PackIndex, BS.ByteString)
+getIndex idxPath = do
   cache <- asks repoPackCache
   let ref = pcIndexes cache
   indexes <- readIORef ref
 
-  case Map.lookup path indexes of
+  case Map.lookup idxPath indexes of
     Just found -> return found
     Nothing -> do
-      raw <- readFileLBS path
+      raw <- readFileLBS idxPath
       let idx = runParserUnsafe packIdxV2Parser raw
-      writeIORef ref $ Map.insert path idx indexes
-      return idx
+      let packFile = Path.replaceExtension idxPath ".pack"
+      packRaw <- liftIO $ MMap.mmapFileByteString packFile Nothing
+      writeIORef ref $ Map.insert idxPath (idx, packRaw) indexes
+      return (idx, packRaw)
 
 -- TODO: cache IORef (HashMap PackId PackHeader)
 findObjInPack :: Hash -> (Hash -> WithRepository Object) -> FilePath -> WithRepository (Maybe Object)
 findObjInPack objHash readObj idxPath = runMaybeT $ do
-  PackIndex{..} <- lift $ getIndex idxPath
+  (PackIndex{..}, contents) <- lift $ getIndex idxPath
 
   let count = fromIntegral $ UV.last idxFanout
   offsetIdx <- hoistMaybe $ binarySearchHashStr idxObjectHashes count objHash
-  let rawOffset = idxOffsets UV.! offsetIdx
+  let rawOffset = idxOffsets `UV.unsafeIndex` offsetIdx
   let isOffsetBig = Bits.testBit rawOffset 31
   let offset :: Word64
       offset =
         if isOffsetBig
-          then idxBigOffsets UV.! fromIntegral (Bits.clearBit rawOffset 31)
+          then idxBigOffsets `UV.unsafeIndex` fromIntegral (Bits.clearBit rawOffset 31)
           else fromIntegral rawOffset
 
-  let packFile = Path.replaceExtension idxPath ".pack"
-  lift $ IO.withBinaryFile packFile IO.ReadMode $ \h -> do
-    readPackObjAtOffset h (fromIntegral offset) readObj
+  lift $ readPackObjAtOffset contents (fromIntegral offset) readObj
 
 {-
 n-byte type and length (3-bit type, (n-1)*7+4-bit length)
@@ -108,12 +109,11 @@ OBJ_REF_DELTA> base object name if
 OBJ_OFS_DELTA> a negative relative offset from the delta object's position in the pack
 compressed delta data
 -}
-readPackObjAtOffset :: IO.Handle -> Integer -> (Hash -> WithRepository Object) -> WithRepository Object
+readPackObjAtOffset :: BS.ByteString -> Int64 -> (Hash -> WithRepository Object) -> WithRepository Object
 readPackObjAtOffset h offset readObj = do
-  IO.hSeek h IO.AbsoluteSeek offset
-  contents <- liftIO $ BSL.hGetContents h
+  let contents = BS.drop (fromIntegral offset) h
 
-  let ((poType, poSize), packObjData) = runParserUnsafe2 packObjHeaderParser contents
+  let ((poType, poSize), packObjData) = runParserUnsafe2 packObjHeaderParser (fromStrict contents)
 
   case poTypeToObjType poType of
     -- simple
@@ -269,7 +269,7 @@ deltaInstrParser = nameParser "deltaInstrParser" $ do
   readByteIf True = fromIntegral <$> A.anyWord8
   readByteIf False = pure 0
 
-offsetParser :: A.Parser Integer
+offsetParser :: A.Parser Int64
 offsetParser = do
   dataBS <- A.takeWhileIncluding (`Bits.testBit` 7)
   let header = BS.head dataBS

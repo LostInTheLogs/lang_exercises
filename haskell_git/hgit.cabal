@@ -57,6 +57,7 @@ executable hgit
     , extra
     , filepath
     , filepattern
+    , mmap
     , mtl
     , optparse-applicative
     , relude
@@ -66,6 +67,5 @@ executable hgit
     , unliftio
     , vector
     , vector-algorithms
-    , vector-th-unbox
     , zlib
   default-language: Haskell2010
