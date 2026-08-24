@@ -1,15 +1,14 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module HGit.Object (
+  strToHash,
+  asciiHashParser,
+  getFileHash,
+  hashLazy,
+  makeObject,
   writeObj,
   readObj,
   readObjOfType,
-  makeObject,
-  deserializeObjType,
-  strToHash,
-  byteHashParser,
-  asciiHashParser,
-  getFileHash,
   Hash (..),
   Object (..),
   ObjType (..),
@@ -31,9 +30,9 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSCL8
 import qualified Data.List as List (stripPrefix)
 import qualified Data.Vector as V
-import HGit.ObjectType
 import HGit.Packfile
 import HGit.Repository (Repository, WithRepository, gitPath, objectsPath)
+import HGit.Types
 import HGit.Utils (binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
 import Relude
 import qualified Relude.File as File
@@ -42,6 +41,25 @@ import qualified System.FilePath as Path
 import qualified Text.Show
 import qualified UnliftIO.Directory as Dir
 import qualified UnliftIO.IO as IO
+
+strToHash :: (ConvertUtf8 a BS.ByteString) => a -> Hash
+strToHash hashText = do
+  case Base16.decode (encodeUtf8 hashText) of
+    Left err -> throwStrErr "strToHash" err
+    Right val -> Hash val
+
+getFileHash :: (MonadIO m) => FilePath -> m Hash
+getFileHash path = liftIO $ do
+  contents <- readFileLBS path
+  let obj = makeObject contents BlobObj
+  return $ objHash obj
+
+asciiHashParser :: A.Parser Hash
+asciiHashParser = do
+  hash <- A.take 40
+  case Base16.decode hash of
+    Left err -> fail err
+    Right val -> return $ Hash val
 
 writeObj :: Object -> WithRepository ()
 writeObj Object{..} = do

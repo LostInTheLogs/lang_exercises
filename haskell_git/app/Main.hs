@@ -15,15 +15,14 @@ import HGit.GitLsFiles
 import HGit.GitLsTree
 import HGit.GitStatus
 
-import Control.Monad (join)
 import HGit.GitReadTree
 import HGit.GitReset
-import HGit.Object (ObjType, deserializeObjType)
+import HGit.Types (ObjType, objTypeFromStr)
 import Options.Applicative
 import Relude
 
 objTypeReader :: ReadM ObjType
-objTypeReader = maybeReader deserializeObjType
+objTypeReader = maybeReader objTypeFromStr
 
 initParser :: Parser (IO ())
 initParser =

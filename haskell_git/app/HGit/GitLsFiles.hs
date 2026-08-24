@@ -16,7 +16,7 @@ gitLsFiles LsFilesOptions{..} = runWithFoundRepo $ do
   Index{..} <- readIndex
   entries <-
     if optModified
-      then V.filterM (isEntryModified) idxEntries
+      then V.filterM isEntryModified idxEntries
       else return idxEntries
   mapM_ lsFile entries
 

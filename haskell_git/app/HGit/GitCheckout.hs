@@ -1,5 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
-
 module HGit.GitCheckout (gitCheckout, CheckoutOptions (..)) where
 
 import qualified Data.Vector as V
@@ -54,7 +52,7 @@ gitCheckout CheckoutOptions{..} = runWithFoundRepo $ do
     exitFailure
 
   -- TODO: git reset hard
-  return ()
+  pass
 
 formatTrackedConflict :: TreeIndexDiff -> WorkTreePath
 formatTrackedConflict x =

@@ -22,8 +22,6 @@ module HGit.Index (
   TreeIndexDiff (..),
 ) where
 
-import Control.Applicative (many)
-import Control.Monad (when)
 import Control.Monad.ST (runST)
 import qualified Control.Monad.Writer.Strict as W
 import qualified Data.Attoparsec.Binary as AB
@@ -43,10 +41,10 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Search as VS
 import Data.Word (Word32)
 import Debug.Trace (trace)
-import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), byteHashParser, getFileHash, makeObject)
-import HGit.ObjectType (Hash (hashBS), hashLazy)
+import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), getFileHash, hashLazy, makeObject)
 import HGit.Repository (Repository, WithRepository, WorkTreePath, gitPath, worktreePath)
 import HGit.Tree (FileMode (..), Tree (treeItems), TreeItem (..), readTree)
+import HGit.Types (Hash (hashBS), byteHashParser)
 import HGit.Utils (insertManySorted, nameParser, runParserUnsafe, throwErr, throwStrErr)
 import Relude
 import System.Directory (executable)
@@ -171,7 +169,7 @@ entryBuilder IndexEntry{..} = W.execWriter $ do
   W.tell $ B.word16BE ieFlags
   case ieExtFlags of
     Just extFlags -> W.tell $ B.word16BE extFlags
-    Nothing -> return ()
+    Nothing -> pass
 
   W.tell $ B.byteString $ BSC8.pack iePath
   W.tell $ B.word8 0
@@ -216,7 +214,7 @@ indexBuilder Index{..} = do
         W.tell $ foldMap extensionBuilder idxExtensions
       bodyBSL = B.toLazyByteString body
       checksum = hashBS $ hashLazy bodyBSL
-  bodyBSL <> BSL.fromStrict checksum
+  bodyBSL <> fromStrict checksum
 
 writeIndex :: Index -> WithRepository ()
 writeIndex index = do

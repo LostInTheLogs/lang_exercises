@@ -3,11 +3,9 @@
 module HGit.GitInit (InitOptions (..), gitInit) where
 
 import Control.Exception (throwIO)
-import Control.Monad
 import HGit.Repository (Repository (..), gitPath, runWithRepo)
 import HGit.Utils
 import Relude
-import System.Exit
 import System.FilePath ((</>))
 import System.IO.Error (alreadyExistsErrorType, mkIOError)
 import UnliftIO.Directory (canonicalizePath)

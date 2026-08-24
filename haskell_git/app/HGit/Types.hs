@@ -1,0 +1,100 @@
+{-# LANGUAGE FlexibleContexts #-}
+
+module HGit.Types (
+  Hash (..),
+  Object (..),
+  ObjType (..),
+  PackIndex (..),
+  hashLazy,
+  byteHashParser,
+  makeObject,
+  readObjType,
+  objTypeToStr,
+  objTypeFromStr,
+) where
+
+import qualified Crypto.Hash.SHA1 as SHA1
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as Base16
+import qualified Data.ByteString.Builder as B
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Vector as V
+import Relude
+import System.FilePath ((</>))
+import qualified Text.Show
+
+import qualified Data.Attoparsec.Lazy as A
+import HGit.Utils (binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
+
+newtype Hash = Hash {hashBS :: BS.ByteString} deriving (Eq, Ord)
+
+byteHashParser :: A.Parser Hash
+byteHashParser = Hash <$> A.take 20
+
+instance Show Hash where
+  show :: Hash -> String
+  show (Hash bs) = decodeUtf8 (Base16.encode bs)
+
+hashLazy :: BSL.ByteString -> Hash
+hashLazy = Hash . SHA1.hashlazy
+
+data ObjType = BlobObj | CommitObj | TreeObj | TagObj deriving (Eq)
+
+instance Show ObjType where
+  show :: ObjType -> String
+  show = objTypeToStr
+
+objTypeToStr :: ObjType -> String
+objTypeToStr BlobObj = "blob"
+objTypeToStr CommitObj = "commit"
+objTypeToStr TreeObj = "tree"
+objTypeToStr TagObj = "tag"
+
+objTypeFromStr :: String -> Maybe ObjType
+objTypeFromStr "blob" = Just BlobObj
+objTypeFromStr "commit" = Just CommitObj
+objTypeFromStr "tree" = Just TreeObj
+objTypeFromStr "tag" = Just TagObj
+objTypeFromStr _ = Nothing
+
+readObjType :: String -> ObjType
+readObjType "blob" = BlobObj
+readObjType "commit" = CommitObj
+readObjType "tree" = TreeObj
+readObjType "tag" = TagObj
+readObjType _ = throwErr "readObjType" "unknown type"
+
+data Object = Object
+  { objType :: ObjType
+  , objSize :: Int64 -- payload size
+  , objHash :: Hash
+  , objPayload :: BSL.ByteString -- payload
+  , objRaw :: BSL.ByteString -- header + payload (uncompressed)
+  }
+  deriving (Show, Eq)
+
+makeObject :: BSL.LazyByteString -> ObjType -> Object
+makeObject objPayload objType =
+  let objSize = BSL.length objPayload
+      objRaw = addHeader objSize
+      objHash = hashLazy objRaw
+   in Object{..}
+ where
+  addHeader len =
+    let header =
+          B.string8 (objTypeToStr objType)
+            <> B.char8 ' '
+            <> B.int64Dec len
+            <> B.word8 0
+        blob = header <> B.lazyByteString objPayload
+     in B.toLazyByteString blob
+
+data PackIndex = PackIndex
+  { idxFanout :: V.Vector Word32
+  , idxObjectHashes :: V.Vector Hash
+  , idxOffsets :: V.Vector Word32
+  , idxBigOffsets :: V.Vector Word64
+  , idxChecksum :: Hash
+  , idxPackChecksum :: Hash
+  }
+  deriving (Show)

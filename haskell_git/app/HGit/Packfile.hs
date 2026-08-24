@@ -10,8 +10,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Vector as V
-import HGit.ObjectType
 import HGit.Repository (WithRepository, objectsPath)
+import HGit.Types
 import HGit.Utils
 import Relude
 import System.FilePath ((</>))
@@ -29,7 +29,7 @@ readPackObj objHash readObj = runMaybeT $ do
   let actions = MaybeT . findObjInPack objHash readObj <$> packIndexes
   asum actions
 
--- TODO: cache
+-- TODO: cache IORef (HashMap PackId PackHeader)
 findObjInPack :: Hash -> (Hash -> WithRepository Object) -> FilePath -> WithRepository (Maybe Object)
 findObjInPack objHash readObj idxPath = runMaybeT $ do
   raw <- readFileLBS idxPath
@@ -100,20 +100,10 @@ readPackObjAtOffset h offset readObj = do
     let base = readPackObjAtOffset h (offset - offsetDelta) readObj
     (base, rest)
   getBase PORefDelta raw = do
-    let (hash, rest) = first (Hash . BSL.toStrict) $ BSL.splitAt 20 raw
+    let (hash, rest) = first (Hash . toStrict) $ BSL.splitAt 20 raw
     let base = readObj hash
     (base, rest)
   getBase _ _ = throwErr "packObjParser" "Not a delta obj, programmer error"
-
-data PackIndex = PackIndex
-  { idxFanout :: V.Vector Word32
-  , idxObjectHashes :: V.Vector Hash
-  , idxOffsets :: V.Vector Word32
-  , idxBigOffsets :: V.Vector Word64
-  , idxChecksum :: Hash
-  , idxPackChecksum :: Hash
-  }
-  deriving (Show)
 
 data PackObjType = POCommit | POTree | POBlob | POTag | POReserved | POOfsDelta | PORefDelta deriving (Show, Eq)
 numToPOType :: (Eq a, Num a) => a -> PackObjType

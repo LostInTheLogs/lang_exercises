@@ -18,8 +18,9 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import qualified Data.String
-import HGit.Object (Hash, ObjType (TreeObj), Object (..), byteHashParser, readObj, readObjOfType)
+import HGit.Object (Hash, ObjType (TreeObj), Object (..), readObj, readObjOfType)
 import HGit.Repository (Repository, WithRepository (WithRepository), WorkTreePath, gitPath)
+import HGit.Types (byteHashParser)
 import HGit.Utils (fReadStrLine, nameParser, runParserUnsafe, throwErr)
 import Relude
 import System.FilePath ((</>))

@@ -51,7 +51,7 @@ listRepoFilesRecursive_ oldSteps relPath = do
     path <- worktreePath [relPath, ".gitignore"]
     bytes <- readFileBS path
     let textContent = decodeUtf8With lenientDecode bytes
-        rawLines = T.lines textContent
+        rawLines = lines textContent
 
     return $ FP.step $ catMaybes $ zipWith parseLine [0 ..] rawLines
 

@@ -8,8 +8,8 @@ import qualified Data.Vector as V
 import HGit.Ignore (listRepoFilesRecursive)
 import HGit.Index (Index (..), IndexEntry (..), fileToEntry, makeEntry, readIndex, writeIndex)
 import HGit.Object (ObjType (BlobObj), Object (objHash), writeObj)
-import HGit.ObjectType (makeObject)
 import HGit.Repository (Repository (..), WithRepository, gitPath, runWithFoundRepo, toWorktreePath, worktreePath')
+import HGit.Types (makeObject)
 import HGit.Utils (insertManySorted, throwErr, throwStrErr)
 import Relude
 import System.FilePath (pathSeparator)

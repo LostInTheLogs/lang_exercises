@@ -2,7 +2,6 @@
 
 module HGit.GitHashObject (HashObjectOptions (..), gitHashObject) where
 
-import Control.Monad (when)
 import qualified Data.ByteString.Lazy as BSL
 import HGit.Object
 import HGit.Repository
@@ -15,4 +14,4 @@ gitHashObject HashObjectOptions{..} = runWithFoundRepo $ do
   contents <- readFileLBS optPath
   let obj = makeObject contents BlobObj
   when optWrite $ writeObj obj
-  putStrLn $ show $ objHash obj
+  print (objHash obj)

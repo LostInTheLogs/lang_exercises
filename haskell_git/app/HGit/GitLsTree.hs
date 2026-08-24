@@ -16,6 +16,7 @@ import HGit.Object (ObjType (CommitObj, TreeObj))
 import HGit.Repository (Repository, runWithFoundRepo)
 import HGit.Tree (FileMode (..), Tree (..), TreeItem (..), flattenTree, modeToStr)
 import Relude
+import Relude.Extra (toFst)
 
 data LsTreeOptions = LsTreeOptions {optRef :: Text, optRecurse :: Bool}
 
@@ -25,7 +26,7 @@ gitLsTree LsTreeOptions{..} = runWithFoundRepo $ do
   flattened <-
     if optRecurse
       then flattenTree tree
-      else return $ (\x -> (tiName x, x)) <$> treeItems tree
+      else return $ toFst tiName <$> treeItems tree
   mapM_ printTreeItem flattened
 
 printTreeItem :: (MonadIO m) => (String, TreeItem) -> m ()
