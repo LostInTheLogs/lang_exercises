@@ -3,7 +3,7 @@
 module HGit.GitInit (InitOptions (..), gitInit) where
 
 import Control.Exception (throwIO)
-import HGit.Repository (Repository (..), gitPath, runWithRepo)
+import HGit.Repository (Repository (..), gitPath, makeRepo, runWithRepo)
 import HGit.Utils
 import Relude
 import System.FilePath ((</>))
@@ -24,7 +24,7 @@ gitInit InitOptions{..} = do
   contents <- Dir.listDirectory gitdir
   unless (null contents) (throwIO $ mkIOError alreadyExistsErrorType "gitInit" Nothing (Just gitdir))
 
-  let repo = Repository{repoWorktree = worktree, repoGitdir = gitdir}
+  repo <- makeRepo worktree gitdir
   runWithRepo repo $ do
     -- Create directory structure
     gitPath ["objects"] >>= Dir.createDirectory

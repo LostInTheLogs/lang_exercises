@@ -9,12 +9,15 @@ module HGit.Repository (
   runWithRepo,
   runWithFoundRepo,
   toWorktreePath,
+  makeRepo,
   Repository (..),
   WithRepository (..),
   WorkTreePath,
+  PackCache (..),
 ) where
 
 import qualified Data.List as List
+import qualified Data.Map as Map
 import HGit.Types
 import HGit.Utils (throwErr, throwStrErr)
 import Relude
@@ -23,26 +26,26 @@ import System.FilePath
 import UnliftIO (MonadUnliftIO)
 import qualified UnliftIO.Directory as Dir
 
-data PackIndexCache = PackIndexCache
-  { pacFile :: FilePath
-  , pacIndex :: PackIndex
+data PackCache = PackCache
+  { pcIndexFiles :: IORef (Maybe [FilePath])
+  , pcIndexes :: IORef (Map FilePath PackIndex)
   }
 
 data Repository = Repository
   { repoWorktree :: FilePath
   , repoGitdir :: FilePath -- Path to .git directory
-  -- , packCache :: IORef [PackIndexCache]
+  , repoPackCache :: PackCache
   }
 
 newtype WithRepository a = WithRepository
-  {unWithRepository :: ReaderT Repository IO a}
+  {getWithRepository :: ReaderT Repository IO a}
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader Repository, MonadUnliftIO)
 
 runWithFoundRepo :: WithRepository a -> IO a
-runWithFoundRepo action = getRepo >>= runReaderT (unWithRepository action)
+runWithFoundRepo action = getRepo >>= runReaderT (getWithRepository action)
 
 runWithRepo :: Repository -> WithRepository a -> IO a
-runWithRepo repo action = runReaderT (unWithRepository action) repo
+runWithRepo repo action = runReaderT (getWithRepository action) repo
 
 -- | Compute path to a file inside .git folder (e.g., repoFile repo ["objects", "4b"])
 gitPath :: [FilePath] -> WithRepository FilePath
@@ -87,13 +90,18 @@ getRepo =
     Nothing -> throwErr "getRepo" "Not in a git repository!"
     Just a -> return a
 
+makeRepo :: (MonadIO m) => FilePath -> FilePath -> m (Repository)
+makeRepo worktree gitdir = do
+  pcIndexFiles <- newIORef Nothing
+  pcIndexes <- newIORef Map.empty
+  return $ Repository{repoWorktree = worktree, repoGitdir = gitdir, repoPackCache = PackCache{..}}
+
 openRepo :: FilePath -> IO (Maybe Repository)
 openRepo worktree = do
   let gitdir = worktree </> ".git"
   isDir <- doesDirectoryExist gitdir
   if isDir
-    then
-      return $ Just Repository{repoWorktree = worktree, repoGitdir = gitdir}
+    then Just <$> makeRepo worktree gitdir
     else return Nothing
 
 type WorkTreePath = FilePath

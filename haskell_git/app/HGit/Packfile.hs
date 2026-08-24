@@ -1,6 +1,7 @@
 module HGit.Packfile (readPackObj) where
 
 import qualified Codec.Compression.Zlib as Zlib
+import Control.Monad.Extra (firstJustM)
 import qualified Data.Attoparsec.Binary as AB
 import Data.Attoparsec.Lazy ((<?>))
 import qualified Data.Attoparsec.Lazy as A
@@ -10,9 +11,10 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Unsafe as BSU
+import qualified Data.Map as Map
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as UV
-import HGit.Repository (WithRepository, objectsPath)
+import HGit.Repository (PackCache (..), WithRepository, objectsPath, repoPackCache)
 import HGit.Types
 import HGit.Utils
 import Relude
@@ -21,15 +23,30 @@ import qualified System.FilePath as Path
 import qualified UnliftIO as IO
 import qualified UnliftIO.Directory as Dir
 
+getIndexFiles :: WithRepository [FilePath]
+getIndexFiles = do
+  cache <- asks repoPackCache
+  let ref = pcIndexFiles cache
+  packPaths <- readIORef ref
+  case packPaths of
+    Just paths -> return paths
+    Nothing -> do
+      packpath <- objectsPath ["pack"]
+      packExists <- Dir.doesDirectoryExist packpath
+      if packExists
+        then do
+          entries <- Dir.listDirectory packpath
+          let packIndexes = [packpath </> f | f <- entries, Path.takeExtension f == ".idx", "pack-" `isPrefixOf` f]
+          writeIORef ref $ Just packIndexes
+          return packIndexes
+        else do
+          writeIORef ref Nothing
+          return []
+
 readPackObj :: Hash -> (Hash -> WithRepository Object) -> WithRepository (Maybe Object)
-readPackObj objHash readObj = runMaybeT $ do
-  packpath <- lift $ objectsPath ["pack"]
-  packExists <- Dir.doesDirectoryExist packpath
-  guard packExists
-  entries <- Dir.listDirectory packpath
-  let packIndexes = [packpath </> f | f <- entries, Path.takeExtension f == ".idx", "pack-" `isPrefixOf` f]
-  let actions = MaybeT . findObjInPack objHash readObj <$> packIndexes
-  asum actions
+readPackObj objHash readObj = do
+  indexFiles <- getIndexFiles
+  firstJustM (findObjInPack objHash readObj) indexFiles
 
 binarySearchHashStr :: ByteString -> Int -> Hash -> Maybe Int
 binarySearchHashStr hashes n hash = loop 0 (n - 1)
@@ -46,11 +63,24 @@ binarySearchHashStr hashes n hash = loop 0 (n - 1)
               EQ -> Just mid
   at x = BSU.unsafeTake 20 (BSU.unsafeDrop (x * 20) hashes)
 
+getIndex :: FilePath -> WithRepository PackIndex
+getIndex path = do
+  cache <- asks repoPackCache
+  let ref = pcIndexes cache
+  indexes <- readIORef ref
+
+  case Map.lookup path indexes of
+    Just found -> return found
+    Nothing -> do
+      raw <- readFileLBS path
+      let idx = runParserUnsafe packIdxV2Parser raw
+      writeIORef ref $ Map.insert path idx indexes
+      return idx
+
 -- TODO: cache IORef (HashMap PackId PackHeader)
 findObjInPack :: Hash -> (Hash -> WithRepository Object) -> FilePath -> WithRepository (Maybe Object)
 findObjInPack objHash readObj idxPath = runMaybeT $ do
-  raw <- readFileLBS idxPath
-  let PackIndex{..} = runParserUnsafe packIdxV2Parser raw
+  PackIndex{..} <- lift $ getIndex idxPath
 
   let count = fromIntegral $ UV.last idxFanout
   offsetIdx <- hoistMaybe $ binarySearchHashStr idxObjectHashes count objHash
@@ -163,7 +193,9 @@ packIdxV2Parser = nameParser "packIdxV2Parser" $ do
         word32beAt offsetsBlock (i * 4)
 
   let largeOffsetCount = UV.length $ UV.filter (`Bits.testBit` 31) idxOffsets
-  idxBigOffsets <- UV.replicateM largeOffsetCount AB.anyWord64be <?> "large offsets"
+  largeOffsetsBlock <- A.take (largeOffsetCount * 8)
+  let idxBigOffsets = UV.generate largeOffsetCount $ \i ->
+        word64beAt largeOffsetsBlock (i * 8)
 
   idxPackChecksum <- byteHashParser
   idxChecksum <- byteHashParser
@@ -176,6 +208,16 @@ packIdxV2Parser = nameParser "packIdxV2Parser" $ do
       .|. (fromIntegral (BS.index bs (i + 1)) `Bits.shiftL` 16)
       .|. (fromIntegral (BS.index bs (i + 2)) `Bits.shiftL` 8)
       .|. fromIntegral (BS.index bs (i + 3))
+  word64beAt :: BS.ByteString -> Int -> Word64
+  word64beAt bs i =
+    (fromIntegral (BS.index bs i) `Bits.shiftL` 56)
+      .|. (fromIntegral (BS.index bs (i + 1)) `Bits.shiftL` 48)
+      .|. (fromIntegral (BS.index bs (i + 2)) `Bits.shiftL` 40)
+      .|. (fromIntegral (BS.index bs (i + 3)) `Bits.shiftL` 32)
+      .|. (fromIntegral (BS.index bs (i + 4)) `Bits.shiftL` 24)
+      .|. (fromIntegral (BS.index bs (i + 5)) `Bits.shiftL` 16)
+      .|. (fromIntegral (BS.index bs (i + 6)) `Bits.shiftL` 8)
+      .|. fromIntegral (BS.index bs (i + 7))
 
 data PackDeltaInstr = PDCopy Int64 Int64 | PBInsert BS.ByteString deriving (Show)
 data PackDelta = PackDelta {pdBaseSize :: Int64, pdObjSize :: Int64, pdInstrs :: [PackDeltaInstr]} deriving (Show)
