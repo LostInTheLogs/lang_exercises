@@ -165,7 +165,7 @@ entryBuilder IndexEntry{..} = W.execWriter $ do
   W.tell $ B.word32BE statUid
   W.tell $ B.word32BE statGid
   W.tell $ B.word32BE statSize
-  W.tell $ B.byteString $ hashBS ieObjHash
+  W.tell $ B.byteString $ fromShort $ hashBS ieObjHash
   W.tell $ B.word16BE ieFlags
   case ieExtFlags of
     Just extFlags -> W.tell $ B.word16BE extFlags
@@ -213,7 +213,7 @@ indexBuilder Index{..} = do
         W.tell $ foldMap entryBuilder idxEntries
         W.tell $ foldMap extensionBuilder idxExtensions
       bodyBSL = B.toLazyByteString body
-      checksum = hashBS $ hashLazy bodyBSL
+      checksum = fromShort $ hashBS $ hashLazy bodyBSL
   bodyBSL <> fromStrict checksum
 
 writeIndex :: Index -> WithRepository ()

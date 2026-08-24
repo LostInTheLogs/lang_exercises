@@ -15,6 +15,7 @@ module HGit.Repository (
 ) where
 
 import qualified Data.List as List
+import HGit.Types
 import HGit.Utils (throwErr, throwStrErr)
 import Relude
 import System.Directory (canonicalizePath, doesDirectoryExist)
@@ -22,11 +23,16 @@ import System.FilePath
 import UnliftIO (MonadUnliftIO)
 import qualified UnliftIO.Directory as Dir
 
+data PackIndexCache = PackIndexCache
+  { pacFile :: FilePath
+  , pacIndex :: PackIndex
+  }
+
 data Repository = Repository
   { repoWorktree :: FilePath
   , repoGitdir :: FilePath -- Path to .git directory
+  -- , packCache :: IORef [PackIndexCache]
   }
-  deriving (Show, Eq)
 
 newtype WithRepository a = WithRepository
   {unWithRepository :: ReaderT Repository IO a}

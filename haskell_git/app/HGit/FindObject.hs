@@ -36,7 +36,7 @@ findHash :: Text -> WithRepository (Maybe Hash)
 findHash hashText = do
   case Base16.decode (encodeUtf8 hashText) of
     Left _ -> return Nothing
-    Right val -> return $ Just $ Hash val
+    Right val -> return $ Just $ Hash $ toShort val
 
 -- | get hash from e.g. HEAD
 findObject :: Text -> WithRepository Hash

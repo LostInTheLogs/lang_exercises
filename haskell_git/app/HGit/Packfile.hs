@@ -9,7 +9,9 @@ import qualified Data.Bits as Bits
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Unsafe as BSU
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as UV
 import HGit.Repository (WithRepository, objectsPath)
 import HGit.Types
 import HGit.Utils
@@ -29,19 +31,35 @@ readPackObj objHash readObj = runMaybeT $ do
   let actions = MaybeT . findObjInPack objHash readObj <$> packIndexes
   asum actions
 
+binarySearchHashStr :: ByteString -> Int -> Hash -> Maybe Int
+binarySearchHashStr hashes n hash = loop 0 (n - 1)
+ where
+  needle = fromShort $ hashBS hash
+  loop low high
+    | low > high = Nothing
+    | otherwise =
+        let mid = low + (high - low) `div` 2
+            val = at mid
+         in case compare needle val of
+              LT -> loop low (mid - 1)
+              GT -> loop (mid + 1) high
+              EQ -> Just mid
+  at x = BSU.unsafeTake 20 (BSU.unsafeDrop (x * 20) hashes)
+
 -- TODO: cache IORef (HashMap PackId PackHeader)
 findObjInPack :: Hash -> (Hash -> WithRepository Object) -> FilePath -> WithRepository (Maybe Object)
 findObjInPack objHash readObj idxPath = runMaybeT $ do
   raw <- readFileLBS idxPath
   let PackIndex{..} = runParserUnsafe packIdxV2Parser raw
 
-  offsetIdx <- hoistMaybe $ binarySearch idxObjectHashes objHash
-  let rawOffset = idxOffsets V.! offsetIdx
+  let count = fromIntegral $ UV.last idxFanout
+  offsetIdx <- hoistMaybe $ binarySearchHashStr idxObjectHashes count objHash
+  let rawOffset = idxOffsets UV.! offsetIdx
   let isOffsetBig = Bits.testBit rawOffset 31
   let offset :: Word64
       offset =
         if isOffsetBig
-          then idxBigOffsets V.! fromIntegral (Bits.clearBit rawOffset 31)
+          then idxBigOffsets UV.! fromIntegral (Bits.clearBit rawOffset 31)
           else fromIntegral rawOffset
 
   let packFile = Path.replaceExtension idxPath ".pack"
@@ -100,7 +118,7 @@ readPackObjAtOffset h offset readObj = do
     let base = readPackObjAtOffset h (offset - offsetDelta) readObj
     (base, rest)
   getBase PORefDelta raw = do
-    let (hash, rest) = first (Hash . toStrict) $ BSL.splitAt 20 raw
+    let (hash, rest) = first (Hash . toShort . toStrict) $ BSL.splitAt 20 raw
     let base = readObj hash
     (base, rest)
   getBase _ _ = throwErr "packObjParser" "Not a delta obj, programmer error"
@@ -132,21 +150,20 @@ packIdxV2Parser = nameParser "packIdxV2Parser" $ do
   _ <- AB.word32be 2
 
   fanoutBlock <- A.take (256 * 4)
-  let idxFanout = V.generate 256 $ \i ->
+  let idxFanout = UV.generate 256 $ \i ->
         word32beAt fanoutBlock (i * 4)
 
-  let count = fromIntegral $ V.last idxFanout
-  hashBlock <- A.take (count * 20)
-  let idxObjectHashes = V.generate count $ \i ->
-        Hash (BS.take 20 (BS.drop (i * 20) hashBlock))
+  let count = fromIntegral $ UV.last idxFanout
+  idxObjectHashes <- A.take (count * 20)
+
   _ <- A.take (4 * count) <?> "crc"
 
   offsetsBlock <- A.take (count * 4)
-  let idxOffsets = V.generate count $ \i ->
+  let idxOffsets = UV.generate count $ \i ->
         word32beAt offsetsBlock (i * 4)
 
-  let largeOffsetCount = length $ V.filter (`Bits.testBit` 31) idxOffsets
-  idxBigOffsets <- V.replicateM largeOffsetCount AB.anyWord64be <?> "large offsets"
+  let largeOffsetCount = UV.length $ UV.filter (`Bits.testBit` 31) idxOffsets
+  idxBigOffsets <- UV.replicateM largeOffsetCount AB.anyWord64be <?> "large offsets"
 
   idxPackChecksum <- byteHashParser
   idxChecksum <- byteHashParser

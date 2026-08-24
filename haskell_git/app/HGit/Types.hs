@@ -19,6 +19,7 @@ import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as UV
 import Relude
 import System.FilePath ((</>))
 import qualified Text.Show
@@ -26,17 +27,17 @@ import qualified Text.Show
 import qualified Data.Attoparsec.Lazy as A
 import HGit.Utils (binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
 
-newtype Hash = Hash {hashBS :: BS.ByteString} deriving (Eq, Ord)
+newtype Hash = Hash {hashBS :: ShortByteString} deriving (Eq, Ord)
 
 byteHashParser :: A.Parser Hash
-byteHashParser = Hash <$> A.take 20
+byteHashParser = Hash . toShort <$> A.take 20
 
 instance Show Hash where
   show :: Hash -> String
-  show (Hash bs) = decodeUtf8 (Base16.encode bs)
+  show (Hash bs) = decodeUtf8 (Base16.encode (fromShort bs))
 
 hashLazy :: BSL.ByteString -> Hash
-hashLazy = Hash . SHA1.hashlazy
+hashLazy = Hash . toShort . SHA1.hashlazy
 
 data ObjType = BlobObj | CommitObj | TreeObj | TagObj deriving (Eq)
 
@@ -90,10 +91,10 @@ makeObject objPayload objType =
      in B.toLazyByteString blob
 
 data PackIndex = PackIndex
-  { idxFanout :: V.Vector Word32
-  , idxObjectHashes :: V.Vector Hash
-  , idxOffsets :: V.Vector Word32
-  , idxBigOffsets :: V.Vector Word64
+  { idxFanout :: UV.Vector Word32
+  , idxObjectHashes :: BS.ByteString
+  , idxOffsets :: UV.Vector Word32
+  , idxBigOffsets :: UV.Vector Word64
   , idxChecksum :: Hash
   , idxPackChecksum :: Hash
   }

@@ -46,7 +46,7 @@ strToHash :: (ConvertUtf8 a BS.ByteString) => a -> Hash
 strToHash hashText = do
   case Base16.decode (encodeUtf8 hashText) of
     Left err -> throwStrErr "strToHash" err
-    Right val -> Hash val
+    Right val -> Hash $ toShort val
 
 getFileHash :: (MonadIO m) => FilePath -> m Hash
 getFileHash path = liftIO $ do
@@ -59,7 +59,7 @@ asciiHashParser = do
   hash <- A.take 40
   case Base16.decode hash of
     Left err -> fail err
-    Right val -> return $ Hash val
+    Right val -> return $ Hash $ toShort val
 
 writeObj :: Object -> WithRepository ()
 writeObj Object{..} = do
