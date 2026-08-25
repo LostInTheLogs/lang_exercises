@@ -62,6 +62,7 @@ executable hgit
     , mtl
     , optparse-applicative
     , relude
+    , template-haskell
     , text
     , transformers
     , unix

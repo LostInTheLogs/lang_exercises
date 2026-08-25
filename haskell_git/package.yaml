@@ -25,6 +25,7 @@ dependencies:
   - filepattern
   - mmap
   - flatparse
+  - template-haskell
 
 executables:
   hgit:

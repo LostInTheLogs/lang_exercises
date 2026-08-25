@@ -10,6 +10,8 @@ module HGit.Utils (
   binarySearch,
   insertManySorted,
   nameParser,
+  Parser,
+  runFParserUnsafe,
 ) where
 
 import Control.Monad.ST (runST)
@@ -23,6 +25,7 @@ import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Heap as VS
 import qualified Data.Vector.Algorithms.Search as VAS
+import qualified FlatParse.Basic as FP
 import Relude
 import qualified Relude.Unsafe as Unsafe
 import qualified System.IO as IO
@@ -42,6 +45,16 @@ fReadStrLine path = liftIO $ withFile path ReadMode IO.hGetLine
 {-# INLINE fReadBSLine #-}
 fReadBSLine :: (MonadIO m) => FilePath -> m ByteString
 fReadBSLine path = liftIO $ withFile path ReadMode BSC8.hGetLine
+
+type Parser = FP.Parser Text
+
+runFParserUnsafe :: (HasCallStack) => Parser a -> BS.ByteString -> a
+runFParserUnsafe parser input = withFrozenCallStack $ do
+  let res = FP.runParser parser input
+  case res of
+    FP.Err e -> throwErr "runFParserUnsafe" e
+    FP.OK a _ -> a
+    FP.Fail -> throwStrErr "runFParserUnsafe" "uncaught parser error"
 
 runParserUnsafe :: (HasCallStack) => A.Parser a -> BSL.ByteString -> a
 runParserUnsafe parser input = withFrozenCallStack $ do

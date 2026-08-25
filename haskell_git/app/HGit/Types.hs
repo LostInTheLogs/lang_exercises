@@ -7,6 +7,7 @@ module HGit.Types (
   PackIndex (..),
   hashLazy,
   byteHashParser,
+  byteHashFParser,
   makeObject,
   readObjType,
   objTypeToStr,
@@ -25,12 +26,16 @@ import System.FilePath ((</>))
 import qualified Text.Show
 
 import qualified Data.Attoparsec.Lazy as A
-import HGit.Utils (binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
+import qualified FlatParse.Basic as FP
+import HGit.Utils (Parser, binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
 
 newtype Hash = Hash {hashBS :: ShortByteString} deriving (Eq, Ord)
 
 byteHashParser :: A.Parser Hash
 byteHashParser = Hash . toShort <$> A.take 20
+
+byteHashFParser :: Parser Hash
+byteHashFParser = Hash . toShort <$> FP.take 20
 
 instance Show Hash where
   show :: Hash -> String

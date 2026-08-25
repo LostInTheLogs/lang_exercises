@@ -29,16 +29,6 @@ import System.IO.Unsafe (unsafePerformIO)
 import qualified UnliftIO as IO
 import qualified UnliftIO.Directory as Dir
 
-type Parser = FP.Parser Text
-
-runFParserUnsafe :: (HasCallStack) => Parser a -> BS.ByteString -> a
-runFParserUnsafe parser input = withFrozenCallStack $ do
-  let res = FP.runParser parser input
-  case res of
-    FP.Err e -> throwErr "runFParserUnsafe" e
-    FP.OK a _ -> a
-    FP.Fail -> throwStrErr "runFParserUnsafe" "uncaught parser error"
-
 getIndexFiles :: WithRepository [FilePath]
 getIndexFiles = do
   cache <- asks repoPackCache
@@ -88,7 +78,7 @@ getIndex idxPath = do
   case Map.lookup idxPath indexes of
     Just found -> return found
     Nothing -> do
-      raw <- readFileBS idxPath
+      raw <- liftIO $ MMap.mmapFileByteString idxPath Nothing
       let idx = runFParserUnsafe packIdxV2FParser raw
 
       let packFile = Path.replaceExtension idxPath ".pack"
@@ -189,9 +179,6 @@ poTypeToObjType _ = Nothing
 
 idxV2Magic :: Word32
 idxV2Magic = 0xff744f63
-
-byteHashFParser :: Parser Hash
-byteHashFParser = Hash . toShort <$> FP.take 20
 
 {-# NOINLINE packIdxV2FParser #-}
 packIdxV2FParser :: Parser PackIndex

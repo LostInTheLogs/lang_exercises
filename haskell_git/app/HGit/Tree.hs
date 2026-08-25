@@ -1,3 +1,6 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module HGit.Tree (
   readTree,
   objToTree,
@@ -18,10 +21,12 @@ import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import qualified Data.String
+import qualified FlatParse.Basic as FP
 import HGit.Object (Hash, ObjType (TreeObj), Object (..), readObj, readObjOfType)
 import HGit.Repository (Repository, WithRepository (WithRepository), WorkTreePath, gitPath)
-import HGit.Types (byteHashParser)
-import HGit.Utils (fReadStrLine, nameParser, runParserUnsafe, throwErr)
+import HGit.Types (byteHashFParser, byteHashParser)
+import HGit.Utils
+import Language.Haskell.TH
 import Relude
 import System.FilePath ((</>))
 
@@ -33,17 +38,19 @@ data FileMode
   | Gitlink -- 160000
   deriving (Show, Eq)
 
-modeParser :: A.Parser FileMode
-modeParser = do
-  modeStr <- A8.takeTill (== ' ')
-  case modeStr of
-    "100644" -> pure RegularFile
-    "100755" -> pure ExecutableFile
-    "120000" -> pure Symlink
-    "040000" -> pure Directory
-    "40000" -> pure Directory
-    "160000" -> pure Gitlink
-    other -> fail $ "Unknown tree object mode: " <> show other
+modeParser :: Parser FileMode
+modeParser =
+  $( FP.switch
+      [|
+        case _ of
+          "100644" -> pure RegularFile
+          "100755" -> pure ExecutableFile
+          "120000" -> pure Symlink
+          "040000" -> pure Directory
+          "40000" -> pure Directory
+          "160000" -> pure Gitlink
+        |]
+   )
 
 modeToStr :: (Data.String.IsString a) => FileMode -> a
 modeToStr mode =
@@ -60,28 +67,29 @@ data Tree = Tree {treeHash :: Hash, treeItems :: [TreeItem]} deriving (Show, Eq)
 -- data TreeItem = TreeItem {tiMode :: BS.ByteString, tiPath :: String, tiHash :: Hash} deriving (Show, Eq)
 -- data Tree = Tree {treeHash :: Hash, treeItems :: [RawTreeItem]} deriving (Show, Eq)
 
-treeParser :: Hash -> A.Parser Tree
-treeParser treeHash = nameParser "treeParser" $ do
-  treeItems <- A.manyTill lnParser A.endOfInput
+treeParser :: Hash -> Parser Tree
+treeParser treeHash = do
+  treeItems <- FP.many lnParser
+  FP.eof
   return Tree{..}
  where
-  lnParser :: A.Parser TreeItem
+  lnParser :: Parser TreeItem
   lnParser = do
-    tiMode <- modeParser <* A8.char ' '
+    tiMode <- modeParser <* $(FP.char ' ')
 
-    toPathRaw <- A8.takeTill (== '\0') <* A8.char '\0'
+    toPathRaw <- FP.anyCString
     let tiName = BSC8.unpack toPathRaw
-    tiHash <- byteHashParser
+    tiHash <- byteHashFParser
 
     return TreeItem{..}
 
 objToTree :: Object -> Tree
-objToTree Object{..} = runParserUnsafe (treeParser objHash) objPayload
+objToTree Object{..} = runFParserUnsafe (treeParser objHash) (toStrict objPayload)
 
 readTree :: Hash -> WithRepository Tree
 readTree hash = do
   Object{..} <- readObjOfType TreeObj hash
-  return $ runParserUnsafe (treeParser hash) objPayload
+  return $ runFParserUnsafe (treeParser hash) (toStrict objPayload)
 
 type FlattenedTree = [(FilePath, TreeItem)]
 
