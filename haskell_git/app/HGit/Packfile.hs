@@ -15,6 +15,9 @@ import qualified Data.Map as Map
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as UV
 import qualified FlatParse.Basic as FP
+import Foreign (peekElemOff)
+import Foreign.Ptr (castPtr)
+import GHC.ByteOrder (ByteOrder (..), targetByteOrder)
 import HGit.Repository (PackCache (..), WithRepository, objectsPath, repoPackCache)
 import HGit.Types
 import HGit.Utils
@@ -22,6 +25,7 @@ import Relude
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
 import qualified System.IO.MMap as MMap
+import System.IO.Unsafe (unsafePerformIO)
 import qualified UnliftIO as IO
 import qualified UnliftIO.Directory as Dir
 
@@ -99,12 +103,12 @@ findObjInPack objHash readObj idxPath = runMaybeT $ do
 
   let count = fromIntegral $ UV.last idxFanout
   offsetIdx <- hoistMaybe $ binarySearchHashStr idxObjectHashes count objHash
-  let rawOffset = idxOffsets `UV.unsafeIndex` offsetIdx
+  let rawOffset = idxOffsets `indexWord32BE` offsetIdx
   let isOffsetBig = Bits.testBit rawOffset 31
   let offset :: Word64
       offset =
         if isOffsetBig
-          then idxBigOffsets `UV.unsafeIndex` fromIntegral (Bits.clearBit rawOffset 31)
+          then idxBigOffsets `indexWord64BE` fromIntegral (Bits.clearBit rawOffset 31)
           else fromIntegral rawOffset
 
   lift $ readPackObjAtOffset contents (fromIntegral offset) readObj
@@ -133,24 +137,24 @@ readPackObjAtOffset h offset readObj = do
       let uncompressed = Zlib.decompress packObjData
       let obj = makeObject uncompressed objType
 
-      let sizeMismatch = poSize /= objSize obj
-      when sizeMismatch $ throwErr "packObjParser" "Size doesn't match"
+      -- let sizeMismatch = poSize /= objSize obj
+      -- when sizeMismatch $ throwErr "packObjParser" "Size doesn't match"
 
-      return $! obj
+      return obj
     -- delta
     Nothing -> do
       let (lazyBaseObj, deltaRaw) = getBase poType packObjData
       let decompressed = Zlib.decompress deltaRaw
-      when (BSL.length decompressed /= poSize) $ throwErr "readPackObjAtOffset" "Delta size doesn't match"
+      -- when (BSL.length decompressed /= poSize) $ throwErr "readPackObjAtOffset" "Delta size doesn't match"
       let delta = runFParserUnsafe deltaFParser (toStrict decompressed)
       base <- lazyBaseObj
 
-      when (pdBaseSize delta /= objSize base) $ throwErr "readPackObjAtOffset" "Base obj size doesn't match"
+      -- when (pdBaseSize delta /= objSize base) $ throwErr "readPackObjAtOffset" "Base obj size doesn't match"
 
       let rawObj = applyDeltas (objPayload base) delta
       let obj = makeObject rawObj (objType base)
 
-      when (pdObjSize delta /= objSize obj) $ throwErr "readPackObjAtOffset" "Result obj size doesn't match"
+      -- when (pdObjSize delta /= objSize obj) $ throwErr "readPackObjAtOffset" "Result obj size doesn't match"
 
       return obj
  where
@@ -189,6 +193,7 @@ idxV2Magic = 0xff744f63
 byteHashFParser :: Parser Hash
 byteHashFParser = Hash . toShort <$> FP.take 20
 
+{-# NOINLINE packIdxV2FParser #-}
 packIdxV2FParser :: Parser PackIndex
 packIdxV2FParser = do
   magic <- FP.anyWord32be
@@ -197,21 +202,17 @@ packIdxV2FParser = do
   unless (ver == 2) $ FP.err "ver != 2"
 
   fanoutBlock <- FP.take (256 * 4)
-  let idxFanout = UV.generate 256 $ \i ->
-        word32beAt fanoutBlock (i * 4)
+  let idxFanout = parseWord32BEVector fanoutBlock 256
   let count = fromIntegral $ UV.last idxFanout
 
   idxObjectHashes <- FP.take (count * 20)
 
   FP.skip (4 * count) -- crc
-  offsetsBlock <- FP.take (count * 4)
-  let idxOffsets = UV.generate count $ \i ->
-        word32beAt offsetsBlock (i * 4)
-  let largeOffsetCount = UV.length $ UV.filter (`Bits.testBit` 31) idxOffsets
+  idxOffsets <- FP.take (count * 4)
 
-  largeOffsetsBlock <- FP.take (largeOffsetCount * 8)
-  let idxBigOffsets = UV.generate largeOffsetCount $ \i ->
-        word64beAt largeOffsetsBlock (i * 8)
+  remainingBytes <- FP.unPos <$> FP.getPos
+
+  idxBigOffsets <- FP.take (remainingBytes - 40)
 
   idxPackChecksum <- byteHashFParser
   idxChecksum <- byteHashFParser
@@ -219,22 +220,43 @@ packIdxV2FParser = do
   FP.eof
   return PackIndex{..}
  where
-  word32beAt :: BS.ByteString -> Int -> Word32
-  word32beAt bs i =
-    (fromIntegral (BS.index bs i) `Bits.shiftL` 24)
-      .|. (fromIntegral (BS.index bs (i + 1)) `Bits.shiftL` 16)
-      .|. (fromIntegral (BS.index bs (i + 2)) `Bits.shiftL` 8)
-      .|. fromIntegral (BS.index bs (i + 3))
-  word64beAt :: BS.ByteString -> Int -> Word64
-  word64beAt bs i =
-    (fromIntegral (BS.index bs i) `Bits.shiftL` 56)
-      .|. (fromIntegral (BS.index bs (i + 1)) `Bits.shiftL` 48)
-      .|. (fromIntegral (BS.index bs (i + 2)) `Bits.shiftL` 40)
-      .|. (fromIntegral (BS.index bs (i + 3)) `Bits.shiftL` 32)
-      .|. (fromIntegral (BS.index bs (i + 4)) `Bits.shiftL` 24)
-      .|. (fromIntegral (BS.index bs (i + 5)) `Bits.shiftL` 16)
-      .|. (fromIntegral (BS.index bs (i + 6)) `Bits.shiftL` 8)
-      .|. fromIntegral (BS.index bs (i + 7))
+  parseWord32BEVector :: BS.ByteString -> Int -> UV.Vector Word32
+  parseWord32BEVector bs count = unsafePerformIO $
+    BSU.unsafeUseAsCStringLen bs $ \(ptr, _) ->
+      UV.generateM count $ \i -> do
+        w <- peekElemOff (castPtr ptr) i
+        pure $ case targetByteOrder of
+          BigEndian -> w
+          LittleEndian -> byteSwap32 w
+  {-# INLINE parseWord32BEVector #-}
+
+  parseWord64BEVector :: BS.ByteString -> Int -> UV.Vector Word64
+  parseWord64BEVector bs count = unsafePerformIO $
+    BSU.unsafeUseAsCStringLen bs $ \(ptr, _) ->
+      UV.generateM count $ \i -> do
+        w <- peekElemOff (castPtr ptr) i
+        pure $ case targetByteOrder of
+          BigEndian -> w
+          LittleEndian -> byteSwap64 w
+  {-# INLINE parseWord64BEVector #-}
+
+indexWord32BE :: BS.ByteString -> Int -> Word32
+indexWord32BE bs i = unsafePerformIO $
+  BSU.unsafeUseAsCStringLen bs $ \(ptr, _) -> do
+    w <- peekElemOff (castPtr ptr) i
+    pure $ case targetByteOrder of
+      BigEndian -> w
+      LittleEndian -> byteSwap32 w
+{-# INLINE indexWord32BE #-}
+
+indexWord64BE :: BS.ByteString -> Int -> Word64
+indexWord64BE bs i = unsafePerformIO $
+  BSU.unsafeUseAsCStringLen bs $ \(ptr, _) -> do
+    w <- peekElemOff (castPtr ptr) i
+    pure $ case targetByteOrder of
+      BigEndian -> w
+      LittleEndian -> byteSwap64 w
+{-# INLINE indexWord64BE #-}
 
 data PackDeltaInstr = PDCopy Int64 Int64 | PBInsert BS.ByteString deriving (Show)
 data PackDelta = PackDelta {pdBaseSize :: Int64, pdObjSize :: Int64, pdInstrs :: [PackDeltaInstr]} deriving (Show)

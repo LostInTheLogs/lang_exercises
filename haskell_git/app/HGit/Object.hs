@@ -110,9 +110,11 @@ Fallback: Scan Individual .idx Files
 
 readObj :: Hash -> WithRepository Object
 readObj objHash = do
-  loose <- readLooseObj objHash
-  pack <- readPackObj objHash readObj
-  let found = loose <|> pack
+  found <- runMaybeT $ do
+    let loose = readLooseObj objHash
+    let pack = readPackObj objHash readObj
+    let readers = MaybeT <$> [pack, loose]
+    asum readers
   let err = throwStrErr "readObj" $ "Object '" ++ show objHash ++ "' not found"
   maybe err return found
 
