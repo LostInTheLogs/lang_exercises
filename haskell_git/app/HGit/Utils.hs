@@ -43,26 +43,28 @@ fReadStrLine path = liftIO $ withFile path ReadMode IO.hGetLine
 fReadBSLine :: (MonadIO m) => FilePath -> m ByteString
 fReadBSLine path = liftIO $ withFile path ReadMode BSC8.hGetLine
 
-runParserUnsafe :: A.Parser a -> BSL.ByteString -> a
-runParserUnsafe parser input = do
+runParserUnsafe :: (HasCallStack) => A.Parser a -> BSL.ByteString -> a
+runParserUnsafe parser input = withFrozenCallStack $ do
   let res = A.parse parser input
   case A.eitherResult res of
     Right obj -> obj
     Left err -> throwStrErr "runParserUnsafe" err
 
-runParserUnsafe2 :: A.Parser a -> BSL.ByteString -> (a, BSL.ByteString)
-runParserUnsafe2 parser input = do
+runParserUnsafe2 :: (HasCallStack) => A.Parser a -> BSL.ByteString -> (a, BSL.ByteString)
+runParserUnsafe2 parser input = withFrozenCallStack $ do
   let res = A.parse parser input
   case res of
     A.Done rest obj -> (obj, rest)
     A.Fail _ [] msg -> throwStrErr "runParserUnsafe2" msg
     A.Fail _ ctx msg -> throwStrErr "runParserUnsafe2" (intercalate " > " ctx <> ": " <> msg)
 
-throwErr :: Text -> Text -> a
-throwErr who msg = error $ "fatal: " <> who <> ": " <> msg
+{-# INLINE throwErr #-}
+throwErr :: (HasCallStack) => Text -> Text -> a
+throwErr who msg = withFrozenCallStack $ error $ "fatal: " <> who <> ": " <> msg
 
-throwStrErr :: String -> String -> a
-throwStrErr who msg = P.error $ "fatal: " <> who <> ": " <> msg
+{-# INLINE throwStrErr #-}
+throwStrErr :: (HasCallStack) => String -> String -> a
+throwStrErr who msg = withFrozenCallStack $ P.error $ "fatal: " <> who <> ": " <> msg
 
 {- | Performs a binary search on a sorted Vector.
 Returns `Just index` if found, or `Nothing` if the target doesn't exist.

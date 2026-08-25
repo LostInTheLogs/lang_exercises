@@ -57,6 +57,7 @@ executable hgit
     , extra
     , filepath
     , filepattern
+    , flatparse
     , mmap
     , mtl
     , optparse-applicative

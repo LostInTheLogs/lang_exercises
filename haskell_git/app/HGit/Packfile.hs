@@ -14,6 +14,7 @@ import qualified Data.ByteString.Unsafe as BSU
 import qualified Data.Map as Map
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as UV
+import qualified FlatParse.Basic as FP
 import HGit.Repository (PackCache (..), WithRepository, objectsPath, repoPackCache)
 import HGit.Types
 import HGit.Utils
@@ -23,6 +24,16 @@ import qualified System.FilePath as Path
 import qualified System.IO.MMap as MMap
 import qualified UnliftIO as IO
 import qualified UnliftIO.Directory as Dir
+
+type Parser = FP.Parser Text
+
+runFParserUnsafe :: (HasCallStack) => Parser a -> BS.ByteString -> a
+runFParserUnsafe parser input = withFrozenCallStack $ do
+  let res = FP.runParser parser input
+  case res of
+    FP.Err e -> throwErr "runFParserUnsafe" e
+    FP.OK a _ -> a
+    FP.Fail -> throwStrErr "runFParserUnsafe" "uncaught parser error"
 
 getIndexFiles :: WithRepository [FilePath]
 getIndexFiles = do
@@ -73,8 +84,9 @@ getIndex idxPath = do
   case Map.lookup idxPath indexes of
     Just found -> return found
     Nothing -> do
-      raw <- readFileLBS idxPath
-      let idx = runParserUnsafe packIdxV2Parser raw
+      raw <- readFileBS idxPath
+      let idx = runFParserUnsafe packIdxV2FParser raw
+
       let packFile = Path.replaceExtension idxPath ".pack"
       packRaw <- liftIO $ MMap.mmapFileByteString packFile Nothing
       writeIORef ref $ Map.insert idxPath (idx, packRaw) indexes
@@ -130,7 +142,7 @@ readPackObjAtOffset h offset readObj = do
       let (lazyBaseObj, deltaRaw) = getBase poType packObjData
       let decompressed = Zlib.decompress deltaRaw
       when (BSL.length decompressed /= poSize) $ throwErr "readPackObjAtOffset" "Delta size doesn't match"
-      let delta = runParserUnsafe deltaParser decompressed
+      let delta = runFParserUnsafe deltaFParser (toStrict decompressed)
       base <- lazyBaseObj
 
       when (pdBaseSize delta /= objSize base) $ throwErr "readPackObjAtOffset" "Base obj size doesn't match"
@@ -174,32 +186,37 @@ poTypeToObjType _ = Nothing
 idxV2Magic :: Word32
 idxV2Magic = 0xff744f63
 
-packIdxV2Parser :: A.Parser PackIndex
-packIdxV2Parser = nameParser "packIdxV2Parser" $ do
-  _ <- AB.word32be idxV2Magic <?> "magic"
-  _ <- AB.word32be 2
+byteHashFParser :: Parser Hash
+byteHashFParser = Hash . toShort <$> FP.take 20
 
-  fanoutBlock <- A.take (256 * 4)
+packIdxV2FParser :: Parser PackIndex
+packIdxV2FParser = do
+  magic <- FP.anyWord32be
+  unless (magic == idxV2Magic) $ FP.err "magic"
+  ver <- FP.anyWord32be
+  unless (ver == 2) $ FP.err "ver != 2"
+
+  fanoutBlock <- FP.take (256 * 4)
   let idxFanout = UV.generate 256 $ \i ->
         word32beAt fanoutBlock (i * 4)
-
   let count = fromIntegral $ UV.last idxFanout
-  idxObjectHashes <- A.take (count * 20)
 
-  _ <- A.take (4 * count) <?> "crc"
+  idxObjectHashes <- FP.take (count * 20)
 
-  offsetsBlock <- A.take (count * 4)
+  FP.skip (4 * count) -- crc
+  offsetsBlock <- FP.take (count * 4)
   let idxOffsets = UV.generate count $ \i ->
         word32beAt offsetsBlock (i * 4)
-
   let largeOffsetCount = UV.length $ UV.filter (`Bits.testBit` 31) idxOffsets
-  largeOffsetsBlock <- A.take (largeOffsetCount * 8)
+
+  largeOffsetsBlock <- FP.take (largeOffsetCount * 8)
   let idxBigOffsets = UV.generate largeOffsetCount $ \i ->
         word64beAt largeOffsetsBlock (i * 8)
 
-  idxPackChecksum <- byteHashParser
-  idxChecksum <- byteHashParser
-  _ <- A.endOfInput <?> "eof"
+  idxPackChecksum <- byteHashFParser
+  idxChecksum <- byteHashFParser
+
+  FP.eof
   return PackIndex{..}
  where
   word32beAt :: BS.ByteString -> Int -> Word32
@@ -233,16 +250,16 @@ applyDeltas base PackDelta{..} = do
       let bytes = BSL.take len (BSL.drop offset base)
       acc <> B.lazyByteString bytes
 
-deltaParser :: A.Parser PackDelta
-deltaParser = do
-  pdBaseSize <- sizeParser
-  pdObjSize <- sizeParser
-  pdInstrs <- many deltaInstrParser
+deltaFParser :: Parser PackDelta
+deltaFParser = do
+  pdBaseSize <- fromIntegral <$> FP.anyVarintProtobuf
+  pdObjSize <- fromIntegral <$> FP.anyVarintProtobuf
+  pdInstrs <- many deltaInstrFParser
   return PackDelta{..}
 
-deltaInstrParser :: A.Parser PackDeltaInstr
-deltaInstrParser = nameParser "deltaInstrParser" $ do
-  op <- A.anyWord8
+deltaInstrFParser :: Parser PackDeltaInstr
+deltaInstrFParser = do
+  op <- FP.anyWord8
 
   when (op == 0) $ throwErr "deltaInstrParser" "reserved instr"
 
@@ -262,11 +279,11 @@ deltaInstrParser = nameParser "deltaInstrParser" $ do
           size = if rawSize == 0 then 0x10000 else rawSize
       return $ PDCopy (fromIntegral offset) (fromIntegral size)
     else do
-      rawData <- A.take $ fromIntegral op
+      rawData <- FP.take $ fromIntegral op
       return $ PBInsert rawData
  where
-  readByteIf :: Bool -> A.Parser Word32
-  readByteIf True = fromIntegral <$> A.anyWord8
+  readByteIf :: Bool -> Parser Word32
+  readByteIf True = fromIntegral <$> FP.anyWord8
   readByteIf False = pure 0
 
 offsetParser :: A.Parser Int64
@@ -282,20 +299,6 @@ offsetParser = do
   foldFun acc a =
     let x = fromIntegral $ a .&. 0b01111111
      in ((acc + 1) `Bits.shiftL` 7) .|. x
-
-sizeParser :: A.Parser Int64
-sizeParser = do
-  headerBS <- A.takeWhileIncluding (`Bits.testBit` 7)
-  let header = BS.head headerBS
-      restBS = BS.tail headerBS
-      initlen = header .&. 0b01111111
-      len = fst $ BS.foldl' foldHeader (fromIntegral initlen, 7) restBS
-  return $ fromIntegral len
- where
-  foldHeader :: (Word64, Int) -> Word8 -> (Word64, Int)
-  foldHeader (acc, shift) a =
-    let x = fromIntegral $ a .&. 0b01111111
-     in (acc .|. (x `Bits.shiftL` shift), shift + 7)
 
 packObjHeaderParser :: A.Parser (PackObjType, Int64)
 packObjHeaderParser = nameParser "packObjHeaderParser" $ do
