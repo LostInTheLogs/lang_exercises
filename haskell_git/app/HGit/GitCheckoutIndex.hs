@@ -36,6 +36,7 @@ gitCheckoutIndex CheckoutIndexOptions{..} = runWithFoundRepo $ do
       then
         putStrLn $ iePath entry <> " already exists, no checkout"
       else do
+        -- TODO: perms, symlink, etc.
         obj <- readObj (ieObjHash entry)
         Dir.createDirectoryIfMissing True (takeDirectory path)
         writeFileLBS path $ objPayload obj

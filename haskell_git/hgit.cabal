@@ -33,6 +33,7 @@ executable hgit
       HGit.Repository
       HGit.Tree
       HGit.Types
+      HGit.UnpackTree
       HGit.Utils
       Paths_hgit
   hs-source-dirs:

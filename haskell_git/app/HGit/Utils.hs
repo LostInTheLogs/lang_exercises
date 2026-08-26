@@ -1,18 +1,4 @@
-module HGit.Utils (
-  putStrErrLn,
-  fReadTxtLine,
-  fReadStrLine,
-  fReadBSLine,
-  runParserUnsafe,
-  runParserUnsafe2,
-  throwErr,
-  throwStrErr,
-  binarySearch,
-  insertManySorted,
-  nameParser,
-  Parser,
-  runFParserUnsafe,
-) where
+module HGit.Utils where
 
 import Control.Monad.ST (runST)
 import Data.Attoparsec.Lazy ((<?>))
@@ -101,3 +87,14 @@ insertManySorted large small = V.modify VS.sort (large V.++ small)
 {-# INLINE nameParser #-}
 nameParser :: String -> A.Parser a -> A.Parser a
 nameParser name parser = parser <?> name
+
+untilM :: (Monad m) => (a -> Bool) -> a -> (a -> m a) -> m a
+untilM p x f
+  | p x = pure x
+  | otherwise = f x >>= flip (untilM p) f
+
+distinctSorted :: (Eq a) => [a] -> [a]
+distinctSorted (x : y : xs)
+  | x == y = distinctSorted (y : xs)
+  | otherwise = x : distinctSorted (y : xs)
+distinctSorted xs = xs

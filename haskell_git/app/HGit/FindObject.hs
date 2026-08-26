@@ -1,6 +1,7 @@
 {-# LANGUAGE BinaryLiterals #-}
 
 module HGit.FindObject (
+  resolveRef,
   findObject,
   findBranch,
   coerceObjTo,
@@ -18,6 +19,13 @@ import HGit.Tree (Tree, objToTree)
 import HGit.Utils
 import Relude
 import qualified UnliftIO.Directory as Dir
+
+resolveRef :: FilePath -> WithRepository FilePath
+resolveRef path = do
+  refOrHead <- fReadStrLine path
+  case List.stripPrefix "ref: " refOrHead of
+    Nothing -> return path
+    Just ref -> asks gitPath [ref] >>= resolveRef
 
 readRef :: FilePath -> WithRepository Hash
 readRef path = do
@@ -57,7 +65,7 @@ coerceObjTo toType obj
   | objType obj == CommitObj && toType == TreeObj = do
       let Commit{commitTree = treeHash} = objToCommit obj
       readObjOfType TreeObj treeHash
-  | otherwise = return obj
+  | otherwise = throwErr "coerceObjTo" "couldn't coerce"
 
 findAndCoerceObj :: ObjType -> Text -> WithRepository Object
 findAndCoerceObj oType ref = coerceObjTo oType =<< readObj =<< findObject ref

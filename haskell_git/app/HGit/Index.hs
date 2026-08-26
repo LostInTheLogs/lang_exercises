@@ -8,7 +8,7 @@ module HGit.Index (
   getStatData,
   getEntryStatus,
   fileToEntry,
-  makeEntry,
+  makeEntryAndStat,
   findEntryByPath,
   makeBlankEntry,
   Index (..),
@@ -219,7 +219,7 @@ indexBuilder Index{..} = do
 writeIndex :: Index -> WithRepository ()
 writeIndex index = do
   indexPath <- gitPath ["index"]
-  let raw = indexBuilder index
+  let raw = indexBuilder $! index
   writeFileLBS indexPath raw
 
 -- https://github.com/git/git/blob/master/Documentation/gitformat-index.adoc
@@ -253,9 +253,19 @@ getStatData path = liftIO $ do
 
 fileToEntry :: FilePath -> WithRepository IndexEntry
 fileToEntry iePath = do
-  path <- worktreePath [iePath]
-  ieObjHash <- getFileHash path
-  makeEntry iePath path ieObjHash
+  realPath <- worktreePath [iePath]
+  ieObjHash <- getFileHash realPath
+
+  symlink <- Dir.pathIsSymbolicLink realPath
+  -- TODO: gitlink
+  ieMode <-
+    if symlink
+      then return Symlink
+      else do
+        isExec <- executable <$> Dir.getPermissions realPath
+        return $ if isExec then ExecutableFile else RegularFile
+
+  makeEntryAndStat iePath realPath ieObjHash ieMode
 
 blankFileStat :: FileStat
 blankFileStat =
@@ -276,19 +286,10 @@ makeBlankEntry iePath ieObjHash ieMode = do
   let ieExtFlags = Nothing
   IndexEntry{..}
 
-makeEntry :: FilePath -> FilePath -> Hash -> WithRepository IndexEntry
-makeEntry iePath path hash = do
+makeEntryAndStat :: (MonadIO m) => WorkTreePath -> FilePath -> Hash -> FileMode -> m IndexEntry
+makeEntryAndStat iePath realPath hash ieMode = do
   let ieObjHash = hash
-  ieStat <- getStatData path
-
-  symlink <- Dir.pathIsSymbolicLink path
-  -- TODO: gitlink
-  ieMode <-
-    if symlink
-      then return Symlink
-      else do
-        isExec <- executable <$> Dir.getPermissions path
-        return $ if isExec then ExecutableFile else RegularFile
+  ieStat <- getStatData realPath
 
   let ieFlags = fromIntegral $ length iePath
   let ieExtFlags = Nothing

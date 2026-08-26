@@ -6,9 +6,10 @@ import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import HGit.Ignore (listRepoFilesRecursive)
-import HGit.Index (Index (..), IndexEntry (..), fileToEntry, makeEntry, readIndex, writeIndex)
+import HGit.Index (Index (..), IndexEntry (..), fileToEntry, makeEntryAndStat, readIndex, writeIndex)
 import HGit.Object (ObjType (BlobObj), Object (objHash), writeObj)
 import HGit.Repository (Repository (..), WithRepository, gitPath, runWithFoundRepo, toWorktreePath, worktreePath')
+import HGit.Tree (FileMode (RegularFile))
 import HGit.Types (makeObject)
 import HGit.Utils (insertManySorted, throwErr, throwStrErr)
 import Relude
@@ -36,13 +37,14 @@ gitAdd AddOptions{..} = runWithFoundRepo $ do
   let oldEntries = V.filter (\entry -> not (iePath entry `Set.member` newFilesSet)) $ idxEntries idx
 
   newEntries <- forM newFiles $ \a -> do
+    -- TODO: perms, symlink, etc.
     filePath <- worktreePath' a
     contents <- readFileLBS filePath
     let obj = makeObject contents BlobObj
     writeObj obj
-    makeEntry a filePath (objHash obj)
+    makeEntryAndStat a filePath (objHash obj) RegularFile
 
   let allEntries = insertManySorted oldEntries (V.fromList newEntries)
   let newIdx = idx{idxEntries = allEntries}
 
-  writeIndex $! newIdx
+  writeIndex newIdx
