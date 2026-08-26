@@ -26,6 +26,7 @@ executable hgit
       HGit.GitReadTree
       HGit.GitReset
       HGit.GitStatus
+      HGit.GitSwitch
       HGit.Ignore
       HGit.Index
       HGit.Object

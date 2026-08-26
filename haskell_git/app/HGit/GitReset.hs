@@ -3,11 +3,12 @@
 module HGit.GitReset (gitReset, ResetOptions (..), ResetMode (..)) where
 
 import HGit.FindObject (findAndCoerceToTree, findObject, resolveRef)
+import HGit.GitSwitch (setHead)
 import HGit.Index (readIndex)
 import HGit.Object (ObjType (CommitObj), Object (..), readObj, readObjOfType)
 import HGit.Repository (WithRepository, WorkTreePath, gitPath, runWithFoundRepo, worktreePath, worktreePath')
 import HGit.Tree (flattenTree)
-import HGit.UnpackTree (unpackTree)
+import HGit.UnpackTree (UnpackTreeOpts (..), unpackTree)
 import HGit.Utils
 import Relude
 import qualified UnliftIO.Directory as Dir
@@ -18,22 +19,9 @@ data ResetOptions = ResetOptions {optMode :: ResetMode, optRef :: Text}
 gitReset :: ResetOptions -> IO ()
 gitReset ResetOptions{..} = runWithFoundRepo $ do
   case optMode of
-    ResetSoft -> gitResetSoft optRef
+    ResetSoft -> setHead optRef
     ResetMixed -> throwErr "gitReset" "umimplemented"
     ResetHard -> gitResetHard optRef
-
--- Leave your working tree files and the index unchanged.
-gitResetSoft :: Text -> WithRepository ()
-gitResetSoft ref = do
-  let branchRef = "refs/heads/" <> ref
-  branchExists <- Dir.doesFileExist =<< gitPath [toString branchRef]
-  newHead <-
-    if branchExists
-      then return $ "ref: " <> branchRef
-      else show . objHash <$> (readObjOfType CommitObj =<< findObject ref)
-
-  headPath <- gitPath ["HEAD"]
-  writeFileText headPath newHead
 
 -- Overwrite all files and directories with the version from <commit>, and may
 -- overwrite untracked files. Tracked files not in <commit> are removed so that
@@ -46,7 +34,7 @@ gitResetHard commit = do
 
   idx <- readIndex
 
-  unpackTree idx flattened
+  unpackTree UnpackTreeOpts{utoCheckConflicts = False} idx flattened
   headFile <- resolveRef =<< gitPath ["HEAD"]
   newHead <- show . objHash <$> (readObjOfType CommitObj =<< findObject commit)
 

@@ -13,10 +13,11 @@ import HGit.GitInit
 import HGit.GitLog
 import HGit.GitLsFiles
 import HGit.GitLsTree
-import HGit.GitStatus
-
 import HGit.GitReadTree
 import HGit.GitReset
+import HGit.GitStatus
+import HGit.GitSwitch
+
 import HGit.Types (ObjType, objTypeFromStr)
 import Options.Applicative
 import Relude
@@ -111,6 +112,12 @@ resetParser =
     optRef <- argument str (metavar "BRANCH" <> help "Branch to reset")
     pure (ResetOptions{..})
 
+switchParser :: Parser (IO ())
+switchParser =
+  gitSwitch <$> do
+    optBranch <- argument str (metavar "BRANCH" <> help "Branch to switch to")
+    pure (SwitchOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -133,3 +140,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "checkout" (info checkoutParser (progDesc "checkout branch or paths to working tree"))
         <> command "reset" (info resetParser (progDesc "set `Head` or the index to a known state"))
         <> command "read-tree" (info readTreeParser (progDesc "read tree information into directory index"))
+        <> command "switch" (info switchParser (progDesc "switch branches"))
