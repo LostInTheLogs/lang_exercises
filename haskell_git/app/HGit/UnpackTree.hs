@@ -85,15 +85,19 @@ unpackTree UnpackTreeOpts{..} index flattenedTree = do
         realPath <- worktreePath' $ iePath entry
 
         exists <- Dir.doesFileExist realPath
-        when exists $ Dir.removeFile realPath
-        return (realPath : rms, entries)
-      DiffSame _ _ -> return (rms, entries)
+        if exists
+          then do
+            Dir.removeFile realPath
+            return (realPath : rms, entries)
+          else
+            return (rms, entries)
+      DiffSame _ entry -> return (rms, entry : entries)
 
   let toRemove = reverse removedRev
   let newEntries = reverse newEntriesRev
 
   untilM null toRemove $ \files -> do
-    let candidates = distinctSorted . Path.takeDirectory <$> files
+    let candidates = distinctSorted $ Path.takeDirectory <$> files
     let foldFun :: [FilePath] -> FilePath -> WithRepository [FilePath]
         foldFun acc path = do
           worktree <- Path.addTrailingPathSeparator <$> asks repoWorktree
