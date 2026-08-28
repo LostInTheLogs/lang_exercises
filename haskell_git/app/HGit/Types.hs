@@ -5,6 +5,8 @@ module HGit.Types (
   Object (..),
   ObjType (..),
   PackIndex (..),
+  zeroHash,
+  zeroAsciiHash,
   hashLazy,
   byteHashBuilder,
   byteHashParser,
@@ -32,6 +34,12 @@ import HGit.Utils (Parser, binarySearch, fReadBSLine, fReadStrLine, nameParser, 
 
 newtype Hash = Hash {hashBS :: ShortByteString} deriving (Eq, Ord)
 
+zeroHash :: Hash
+zeroHash = Hash $ toShort $ BS.replicate 20 0
+
+zeroAsciiHash :: [Char]
+zeroAsciiHash = replicate 40 '0'
+
 byteHashBuilder :: Hash -> B.Builder
 byteHashBuilder hash = B.byteString $ fromShort $ hashBS hash
 
@@ -43,6 +51,7 @@ byteHashFParser = Hash . toShort <$> FP.take 20
 
 instance Show Hash where
   show :: Hash -> String
+  show hash | zeroHash == hash = zeroAsciiHash
   show (Hash bs) = decodeUtf8 (Base16.encode (fromShort bs))
 
 hashLazy :: BSL.ByteString -> Hash

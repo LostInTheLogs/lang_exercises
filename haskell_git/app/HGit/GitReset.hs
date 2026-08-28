@@ -3,7 +3,7 @@
 module HGit.GitReset (gitReset, ResetOptions (..), ResetMode (..)) where
 
 import HGit.FindObject (findAndCoerceToTree, findObject, resolveRef)
-import HGit.GitSwitch (setHead)
+import HGit.GitSwitch (setHeadToBranch)
 import HGit.Index (readIndex)
 import HGit.Object (ObjType (CommitObj), Object (..), readObj, readObjOfType)
 import HGit.Repository (WithRepository, WorkTreePath, gitPath, runWithFoundRepo, worktreePath, worktreePath')
@@ -19,7 +19,7 @@ data ResetOptions = ResetOptions {optMode :: ResetMode, optRef :: Text}
 gitReset :: ResetOptions -> IO ()
 gitReset ResetOptions{..} = runWithFoundRepo $ do
   case optMode of
-    ResetSoft -> setHead optRef
+    ResetSoft -> setHeadToBranch optRef
     ResetMixed -> throwErr "gitReset" "umimplemented"
     ResetHard -> gitResetHard optRef
 

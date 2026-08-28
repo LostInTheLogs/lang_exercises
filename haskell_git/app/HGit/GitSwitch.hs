@@ -1,4 +1,4 @@
-module HGit.GitSwitch (gitSwitch, SwitchOptions (..), setHead) where
+module HGit.GitSwitch (gitSwitch, SwitchOptions (..), setHeadToBranch) where
 
 import HGit.FindObject (findAndCoerceToTree, findObject)
 import HGit.Index (readIndex)
@@ -12,8 +12,8 @@ import qualified UnliftIO.Directory as Dir
 
 data SwitchOptions = SwitchOptions {optBranch :: Text}
 
-setHead :: Text -> WithRepository ()
-setHead ref = do
+setHeadToBranch :: Text -> WithRepository ()
+setHeadToBranch ref = do
   let branchRef = "refs/heads/" <> ref
   branchExists <- Dir.doesFileExist =<< gitPath [toString branchRef]
   newHead <-
@@ -32,4 +32,4 @@ gitSwitch SwitchOptions{..} = runWithFoundRepo $ do
   idx <- readIndex
 
   unpackTree UnpackTreeOpts{utoCheckConflicts = True} idx flattened
-  setHead optBranch
+  setHeadToBranch optBranch

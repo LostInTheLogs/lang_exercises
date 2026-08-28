@@ -19,6 +19,7 @@ dependencies:
   - vector-algorithms
   - containers
   - text
+  - time
   - unix
   - extra
   - unliftio

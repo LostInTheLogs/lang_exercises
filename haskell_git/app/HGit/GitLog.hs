@@ -5,7 +5,7 @@ module HGit.GitLog (gitLog, LogOptions (..)) where
 
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import HGit.Commit (Commit (..), readCommit)
+import HGit.Commit (Commit (..), oneLineShort, readCommit)
 import HGit.FindObject (findObject)
 import HGit.Object (Hash, ObjType (CommitObj), objPayload, readObj, strToHash)
 import HGit.Repository (Repository, WithRepository, runWithFoundRepo)
@@ -26,12 +26,5 @@ logRec (hash : hashes) seen =
       logRec hashes seen
     else do
       commit <- readCommit hash
-      putTextLn $ oneLine commit
+      putTextLn $ oneLineShort commit
       logRec (hashes ++ commitParents commit) (Set.insert hash seen)
-
-oneLine :: Commit -> Text
-oneLine Commit{..} = do
-  let hash = toText $ take 7 (show commitHash)
-  let msg = decodeUtf8 commitMsg
-  let oneLnMsg = T.strip $ T.replace "\n" " " msg
-  hash <> " " <> oneLnMsg

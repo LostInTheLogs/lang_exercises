@@ -220,7 +220,7 @@ writeIndex :: Index -> WithRepository ()
 writeIndex index = do
   indexPath <- gitPath ["index"]
   let raw = indexBuilder $! index
-  writeFileLBS indexPath raw
+  writeFileLBS indexPath $! raw
 
 -- https://github.com/git/git/blob/master/Documentation/gitformat-index.adoc
 readIndex :: WithRepository Index

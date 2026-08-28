@@ -1,7 +1,7 @@
 module HGit.GitCheckout (gitCheckout, CheckoutOptions (..)) where
 
 import HGit.FindObject (findAndCoerceToTree)
-import HGit.GitSwitch (setHead)
+import HGit.GitSwitch (setHeadToBranch)
 import HGit.Index (readIndex)
 import HGit.Repository (WithRepository (WithRepository), runWithFoundRepo)
 import HGit.Tree (flattenTree)
@@ -19,4 +19,4 @@ gitCheckout CheckoutOptions{..} = runWithFoundRepo $ do
   idx <- readIndex
 
   unpackTree UnpackTreeOpts{utoCheckConflicts = True} idx flattened
-  setHead optBranch
+  setHeadToBranch optBranch
