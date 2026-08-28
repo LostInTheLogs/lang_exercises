@@ -7,6 +7,7 @@ import HGit.GitAdd
 import HGit.GitCatFile
 import HGit.GitCheckout
 import HGit.GitCheckoutIndex
+import HGit.GitCommit
 import HGit.GitDiffIndex
 import HGit.GitHashObject
 import HGit.GitInit
@@ -118,6 +119,12 @@ switchParser =
     optBranch <- argument str (metavar "BRANCH" <> help "Branch to switch to")
     pure (SwitchOptions{..})
 
+commitParser :: Parser (IO ())
+commitParser =
+  gitCommit <$> do
+    optMessage <- strOption (short 'm' <> metavar "message")
+    pure (CommitOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -141,3 +148,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "reset" (info resetParser (progDesc "set `Head` or the index to a known state"))
         <> command "read-tree" (info readTreeParser (progDesc "read tree information into directory index"))
         <> command "switch" (info switchParser (progDesc "switch branches"))
+        <> command "commit" (info commitParser (progDesc "record changes to repository"))

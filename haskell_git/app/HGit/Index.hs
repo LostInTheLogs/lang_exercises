@@ -44,7 +44,7 @@ import Debug.Trace (trace)
 import HGit.Object (Hash, ObjType (BlobObj), Object (objHash), getFileHash, hashLazy, makeObject)
 import HGit.Repository (Repository, WithRepository, WorkTreePath, gitPath, worktreePath)
 import HGit.Tree (FileMode (..), Tree (treeItems), TreeItem (..), readTree)
-import HGit.Types (Hash (hashBS), byteHashParser)
+import HGit.Types (Hash (hashBS), byteHashBuilder, byteHashParser)
 import HGit.Utils (insertManySorted, nameParser, runParserUnsafe, throwErr, throwStrErr)
 import Relude
 import System.Directory (executable)
@@ -165,7 +165,7 @@ entryBuilder IndexEntry{..} = W.execWriter $ do
   W.tell $ B.word32BE statUid
   W.tell $ B.word32BE statGid
   W.tell $ B.word32BE statSize
-  W.tell $ B.byteString $ fromShort $ hashBS ieObjHash
+  W.tell $ byteHashBuilder ieObjHash
   W.tell $ B.word16BE ieFlags
   case ieExtFlags of
     Just extFlags -> W.tell $ B.word16BE extFlags

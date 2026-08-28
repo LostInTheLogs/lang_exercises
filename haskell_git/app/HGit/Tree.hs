@@ -3,6 +3,7 @@
 
 module HGit.Tree (
   readTree,
+  writeTree,
   objToTree,
   modeToStr,
   flattenTree,
@@ -12,19 +13,21 @@ module HGit.Tree (
   FlattenedTree,
 ) where
 
+import qualified Control.Monad.Writer as W
 import qualified Data.Attoparsec.ByteString.Char8 as A8
 import Data.Attoparsec.ByteString.Lazy ((<?>))
 import qualified Data.Attoparsec.ByteString.Lazy as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
+import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC8
 import qualified Data.String
 import qualified FlatParse.Basic as FP
-import HGit.Object (Hash, ObjType (TreeObj), Object (..), readObj, readObjOfType)
+import HGit.Object (Hash, ObjType (TreeObj), Object (..), makeObject, readObj, readObjOfType, writeObj)
 import HGit.Repository (Repository, WithRepository (WithRepository), WorkTreePath, gitPath)
-import HGit.Types (byteHashFParser, byteHashParser)
+import HGit.Types (byteHashBuilder, byteHashFParser, byteHashParser)
 import HGit.Utils
 import Language.Haskell.TH
 import Relude
@@ -38,6 +41,15 @@ data FileMode
   | Gitlink -- 160000
   deriving (Show, Eq)
 
+modeBuilder :: FileMode -> B.Builder
+modeBuilder mode = B.byteString $
+  case mode of
+    RegularFile -> "100644"
+    ExecutableFile -> "100755"
+    Symlink -> "120000"
+    Directory -> "40000"
+    Gitlink -> "160000"
+
 modeParser :: Parser FileMode
 modeParser =
   $( FP.switch
@@ -46,7 +58,7 @@ modeParser =
           "100644" -> pure RegularFile
           "100755" -> pure ExecutableFile
           "120000" -> pure Symlink
-          "040000" -> pure Directory
+          "040000" -> pure Directory -- legacy in Tree
           "40000" -> pure Directory
           "160000" -> pure Gitlink
         |]
@@ -64,8 +76,13 @@ modeToStr mode =
 data TreeItem = TreeItem {tiMode :: FileMode, tiName :: String, tiHash :: Hash} deriving (Show, Eq)
 data Tree = Tree {treeHash :: Hash, treeItems :: [TreeItem]} deriving (Show, Eq)
 
--- data TreeItem = TreeItem {tiMode :: BS.ByteString, tiPath :: String, tiHash :: Hash} deriving (Show, Eq)
--- data Tree = Tree {treeHash :: Hash, treeItems :: [RawTreeItem]} deriving (Show, Eq)
+treeBuilder :: [TreeItem] -> B.Builder
+treeBuilder items = W.execWriter $ do
+  W.tell $ foldMap lnBuilder items
+  pass
+ where
+  lnBuilder TreeItem{..} = do
+    modeBuilder tiMode <> B.char7 ' ' <> B.stringUtf8 tiName <> B.word8 0 <> byteHashBuilder tiHash
 
 treeParser :: Hash -> Parser Tree
 treeParser treeHash = do
@@ -103,3 +120,14 @@ flattenTree tree = reverse <$> go "" (treeItems tree) []
     newAcc <- go (path </> tiName dir) (treeItems newTree) acc
     go path rest newAcc
   go path (item : rest) acc = go path rest $ (path </> tiName item, item) : acc
+
+-- | assumes the items are sorted
+writeTree :: [TreeItem] -> WithRepository Tree
+writeTree items = do
+  let payload = B.toLazyByteString $ treeBuilder items
+  let obj = makeObject payload TreeObj
+
+  let tree = Tree{treeHash = objHash obj, treeItems = items}
+
+  writeObj obj
+  return tree

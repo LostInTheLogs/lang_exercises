@@ -12,11 +12,13 @@ executable hgit
   main-is: Main.hs
   other-modules:
       HGit.Commit
+      HGit.Config
       HGit.FindObject
       HGit.GitAdd
       HGit.GitCatFile
       HGit.GitCheckout
       HGit.GitCheckoutIndex
+      HGit.GitCommit
       HGit.GitDiffIndex
       HGit.GitHashObject
       HGit.GitInit

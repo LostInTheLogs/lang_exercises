@@ -6,6 +6,7 @@ module HGit.Types (
   ObjType (..),
   PackIndex (..),
   hashLazy,
+  byteHashBuilder,
   byteHashParser,
   byteHashFParser,
   makeObject,
@@ -30,6 +31,9 @@ import qualified FlatParse.Basic as FP
 import HGit.Utils (Parser, binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
 
 newtype Hash = Hash {hashBS :: ShortByteString} deriving (Eq, Ord)
+
+byteHashBuilder :: Hash -> B.Builder
+byteHashBuilder hash = B.byteString $ fromShort $ hashBS hash
 
 byteHashParser :: A.Parser Hash
 byteHashParser = Hash . toShort <$> A.take 20
