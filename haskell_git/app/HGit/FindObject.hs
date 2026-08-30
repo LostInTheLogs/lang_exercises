@@ -1,9 +1,7 @@
 {-# LANGUAGE BinaryLiterals #-}
 
 module HGit.FindObject (
-  resolveRef,
   findObject,
-  findBranch,
   coerceObjTo,
   findAndCoerceObj,
   findAndCoerceToTree,
@@ -14,31 +12,12 @@ import qualified Data.ByteString.Base16 as Base16
 import qualified Data.List as List
 import HGit.Commit (Commit (..), objToCommit)
 import HGit.Object (Hash (..), ObjType (..), Object (..), readObj, readObjOfType, strToHash)
+import HGit.Ref
 import HGit.Repository (Repository, WithRepository, gitPath)
 import HGit.Tree (Tree, objToTree)
 import HGit.Utils
 import Relude
 import qualified UnliftIO.Directory as Dir
-
-resolveRef :: FilePath -> WithRepository FilePath
-resolveRef path = do
-  refOrHead <- fReadStrLine path
-  case List.stripPrefix "ref: " refOrHead of
-    Nothing -> return path
-    Just ref -> asks gitPath [ref] >>= resolveRef
-
-readRef :: FilePath -> WithRepository Hash
-readRef path = do
-  refOrHead <- fReadStrLine path
-  case List.stripPrefix "ref: " refOrHead of
-    Nothing -> return $ strToHash refOrHead
-    Just ref -> asks gitPath [ref] >>= readRef
-
-findBranch :: FilePath -> WithRepository (Maybe Hash)
-findBranch name = do
-  path <- asks gitPath ["refs", "heads", name]
-  fileExists <- Dir.doesFileExist path
-  if fileExists then Just <$> readRef path else return Nothing
 
 findHash :: Text -> WithRepository (Maybe Hash)
 findHash hashText = do

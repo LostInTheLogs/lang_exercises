@@ -2,10 +2,11 @@
 
 module HGit.GitReset (gitReset, ResetOptions (..), ResetMode (..)) where
 
-import HGit.FindObject (findAndCoerceToTree, findObject, resolveRef)
+import HGit.FindObject (findAndCoerceToTree, findObject)
 import HGit.GitSwitch (setHeadToBranch)
 import HGit.Index (readIndex)
 import HGit.Object (ObjType (CommitObj), Object (..), readObj, readObjOfType)
+import HGit.Ref (resolveRef)
 import HGit.Repository (WithRepository, WorkTreePath, gitPath, runWithFoundRepo, worktreePath, worktreePath')
 import HGit.Tree (flattenTree)
 import HGit.UnpackTree (UnpackTreeOpts (..), unpackTree)

@@ -11,6 +11,8 @@ module HGit.Types (
   byteHashBuilder,
   byteHashParser,
   byteHashFParser,
+  asciiHashParser,
+  asciiHashFParser,
   makeObject,
   readObjType,
   objTypeToStr,
@@ -46,8 +48,22 @@ byteHashBuilder hash = B.byteString $ fromShort $ hashBS hash
 byteHashParser :: A.Parser Hash
 byteHashParser = Hash . toShort <$> A.take 20
 
+asciiHashParser :: A.Parser Hash
+asciiHashParser = do
+  hash <- A.take 40
+  case Base16.decode hash of
+    Left err -> fail err
+    Right val -> return $ Hash $ toShort val
+
 byteHashFParser :: Parser Hash
 byteHashFParser = Hash . toShort <$> FP.take 20
+
+asciiHashFParser :: Parser Hash
+asciiHashFParser = do
+  hash <- FP.take 40
+  case Base16.decode hash of
+    Left err -> FP.err $ toText err
+    Right val -> return $ Hash $ toShort val
 
 instance Show Hash where
   show :: Hash -> String

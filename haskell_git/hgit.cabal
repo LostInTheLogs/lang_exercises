@@ -20,6 +20,7 @@ executable hgit
       HGit.GitCheckoutIndex
       HGit.GitCommit
       HGit.GitDiffIndex
+      HGit.GitFetch
       HGit.GitHashObject
       HGit.GitInit
       HGit.GitLog
@@ -33,6 +34,7 @@ executable hgit
       HGit.Index
       HGit.Object
       HGit.Packfile
+      HGit.Ref
       HGit.Repository
       HGit.Tree
       HGit.Types
@@ -42,19 +44,21 @@ executable hgit
   hs-source-dirs:
       app
   default-extensions:
-      NoImplicitPrelude
       BinaryLiterals
       InstanceSigs
-      RecordWildCards
-      OverloadedStrings
       LambdaCase
-  ghc-options: -Wall -fwarn-incomplete-uni-patterns -fno-warn-unused-binds -fno-warn-unused-do-bind -fno-warn-unused-imports -fno-warn-type-defaults -ferror-spans -Werror=missing-fields -O2
+      NoImplicitPrelude
+      OverloadedStrings
+      RecordWildCards
+  ghc-options: -O2 -Wall -Werror=missing-fields -ferror-spans -fno-warn-type-defaults -fno-warn-unused-binds -fno-warn-unused-do-bind -fno-warn-unused-imports -fwarn-incomplete-uni-patterns
   build-depends:
       attoparsec
     , attoparsec-binary
     , base ==4.*
     , base16-bytestring
     , bytestring
+    , conduit
+    , conduit-extra
     , containers
     , cryptohash-sha1
     , directory
@@ -62,9 +66,12 @@ executable hgit
     , filepath
     , filepattern
     , flatparse
+    , http-conduit
+    , http-types
     , mmap
     , mtl
     , optparse-applicative
+    , pqueue
     , relude
     , template-haskell
     , text

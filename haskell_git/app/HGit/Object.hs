@@ -2,7 +2,6 @@
 
 module HGit.Object (
   strToHash,
-  asciiHashParser,
   getFileHash,
   hashLazy,
   makeObject,
@@ -42,7 +41,7 @@ import qualified Text.Show
 import qualified UnliftIO.Directory as Dir
 import qualified UnliftIO.IO as IO
 
-strToHash :: (ConvertUtf8 a BS.ByteString) => a -> Hash
+strToHash :: String -> Hash
 strToHash hashText = do
   case Base16.decode (encodeUtf8 hashText) of
     Left err -> throwStrErr "strToHash" err
@@ -53,13 +52,6 @@ getFileHash path = liftIO $ do
   contents <- readFileLBS path
   let obj = makeObject contents BlobObj
   return $ objHash obj
-
-asciiHashParser :: A.Parser Hash
-asciiHashParser = do
-  hash <- A.take 40
-  case Base16.decode hash of
-    Left err -> fail err
-    Right val -> return $ Hash $ toShort val
 
 writeObj :: Object -> WithRepository ()
 writeObj Object{..} = do

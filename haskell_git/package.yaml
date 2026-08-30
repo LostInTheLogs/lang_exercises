@@ -3,30 +3,35 @@ version: 0.1.0.0
 
 dependencies:
   - base == 4.*
-  - relude
-  - directory
-  - filepath
-  - mtl
-  - transformers
-  - bytestring
-  - cryptohash-sha1
-  - base16-bytestring
-  - zlib
-  - optparse-applicative
   - attoparsec
   - attoparsec-binary
-  - vector
-  - vector-algorithms
+  - base16-bytestring
+  - bytestring
+  - conduit
+  - conduit-extra
   - containers
+  - cryptohash-sha1
+  - directory
+  - extra
+  - filepath
+  - filepattern
+  - flatparse
+  - pqueue
+  - http-conduit
+  - http-types
+  - mmap
+  - mtl
+  - optparse-applicative
+  - relude
+  - template-haskell
   - text
   - time
+  - transformers
   - unix
-  - extra
   - unliftio
-  - filepattern
-  - mmap
-  - flatparse
-  - template-haskell
+  - vector
+  - vector-algorithms
+  - zlib
 
 executables:
   hgit:
@@ -34,20 +39,20 @@ executables:
     source-dirs: app
 
 ghc-options:
+  - -O2
   - -Wall
-  - -fwarn-incomplete-uni-patterns
+  - -Werror=missing-fields
+  - -ferror-spans
+  - -fno-warn-type-defaults
   - -fno-warn-unused-binds
   - -fno-warn-unused-do-bind
   - -fno-warn-unused-imports
-  - -fno-warn-type-defaults
-  - -ferror-spans
-  - -Werror=missing-fields
-  - -O2
+  - -fwarn-incomplete-uni-patterns
 
 default-extensions:
-  - NoImplicitPrelude
   - BinaryLiterals
   - InstanceSigs
-  - RecordWildCards
-  - OverloadedStrings
   - LambdaCase
+  - NoImplicitPrelude
+  - OverloadedStrings
+  - RecordWildCards

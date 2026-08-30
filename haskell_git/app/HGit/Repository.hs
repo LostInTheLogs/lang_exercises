@@ -16,7 +16,6 @@ module HGit.Repository (
   PackCache (..),
 ) where
 
-import qualified Data.ByteString as BS
 import qualified Data.List as List
 import qualified Data.Map as Map
 import HGit.Types
@@ -29,7 +28,7 @@ import qualified UnliftIO.Directory as Dir
 
 data PackCache = PackCache
   { pcIndexFiles :: IORef (Maybe [FilePath])
-  , pcIndexes :: IORef (Map FilePath (PackIndex, BS.ByteString))
+  , pcIndexes :: IORef (Map FilePath (PackIndex, ByteString))
   }
 
 data Repository = Repository

@@ -5,7 +5,7 @@ module HGit.GitLog (gitLog, LogOptions (..)) where
 
 import qualified Data.Set as Set
 import qualified Data.Text as T
-import HGit.Commit (Commit (..), oneLineShort, readCommit)
+import HGit.Commit (Commit (..), CommitQueue, cmtQueuePop, makeCmtQueue, oneLineShort, readCommit)
 import HGit.FindObject (findObject)
 import HGit.Object (Hash, ObjType (CommitObj), objPayload, readObj, strToHash)
 import HGit.Repository (Repository, WithRepository, runWithFoundRepo)
@@ -15,16 +15,12 @@ data LogOptions = LogOptions {optRef :: Text}
 
 gitLog :: LogOptions -> IO ()
 gitLog LogOptions{..} = runWithFoundRepo $ do
-  rootHash <- findObject optRef
-  logRec [rootHash] Set.empty
+  rootCmt <- readCommit =<< findObject optRef
+  let queue = makeCmtQueue [rootCmt]
+  logRec =<< cmtQueuePop queue
 
-logRec :: [Hash] -> Set.Set Hash -> WithRepository ()
-logRec [] _ = pass
-logRec (hash : hashes) seen =
-  if Set.member hash seen
-    then
-      logRec hashes seen
-    else do
-      commit <- readCommit hash
-      putTextLn $ oneLineShort commit
-      logRec (hashes ++ commitParents commit) (Set.insert hash seen)
+logRec :: (Maybe Commit, CommitQueue) -> WithRepository ()
+logRec (Nothing, _) = pass
+logRec (Just commit, queue) = do
+  putTextLn $ oneLineShort commit
+  logRec =<< cmtQueuePop queue

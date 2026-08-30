@@ -5,12 +5,14 @@ import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.Time as Time
+import qualified Data.Time.Clock.POSIX as TimeP
 import qualified Data.Vector as V
-import HGit.Commit (Commit (..), oneLineLong, readCommit, writeCommit)
+import HGit.Commit (Commit (..), Person (..), oneLineLong, readCommit, writeCommit)
 import HGit.Config (readConfig)
-import HGit.FindObject (findAndCoerceToTree, findObject, resolveRef)
+import HGit.FindObject (findAndCoerceToTree, findObject)
 import HGit.Index (FileMode (Directory), Index (idxEntries), IndexEntry (..), readIndex)
 import HGit.Object (ObjType (CommitObj), Object (..), readObjOfType)
+import HGit.Ref (resolveRef)
 import HGit.Repository (WithRepository (WithRepository), WorkTreePath, gitPath, runWithFoundRepo)
 import HGit.Tree (Tree (..), TreeItem (..), writeTree)
 import HGit.Types (zeroHash)
@@ -59,9 +61,12 @@ indexToTree index = writeTree . snd =<< go [] 0 []
       Nothing -> do
         return (idx, reverse items)
 
-getGitTimestamp :: (MonadIO m) => m Text
+getGitTimestamp :: (MonadIO m) => m (Int64, ByteString)
 getGitTimestamp = liftIO $ do
-  toText . Time.formatTime Time.defaultTimeLocale "%s %z" <$> Time.getZonedTime
+  time <- Time.getZonedTime
+  posixSecs <- round <$> TimeP.getPOSIXTime
+  let tz = Time.formatTime Time.defaultTimeLocale "%z" time
+  return (posixSecs, encodeUtf8 tz)
 
 gitCommit :: CommitOptions -> IO ()
 gitCommit CommitOptions{..} = runWithFoundRepo $ do
@@ -85,8 +90,14 @@ gitCommit CommitOptions{..} = runWithFoundRepo $ do
   let user = Unsafe.last $ userSection Map.! "name"
   let email = Unsafe.last $ userSection Map.! "email"
 
-  timestamp <- getGitTimestamp
-  let committer = user <> " <" <> email <> "> " <> timestamp
+  (tSecs, tTz) <- getGitTimestamp
+  let committer =
+        Person
+          { pName = encodeUtf8 user
+          , pEmail = encodeUtf8 email
+          , pTimeSecs = tSecs
+          , pTimeTz = tTz
+          }
 
   commit <-
     writeCommit
@@ -96,8 +107,8 @@ gitCommit CommitOptions{..} = runWithFoundRepo $ do
         , commitMsg = encodeUtf8 message
         , commitHeaderRest = ""
         , commitHash = zeroHash
-        , commitCommitter = encodeUtf8 committer
-        , commitAuthor = encodeUtf8 committer
+        , commitCommitter = committer
+        , commitAuthor = committer
         }
 
   headFile <- resolveRef =<< gitPath ["HEAD"]

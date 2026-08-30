@@ -9,6 +9,7 @@ import HGit.GitCheckout
 import HGit.GitCheckoutIndex
 import HGit.GitCommit
 import HGit.GitDiffIndex
+import HGit.GitFetch
 import HGit.GitHashObject
 import HGit.GitInit
 import HGit.GitLog
@@ -125,6 +126,11 @@ commitParser =
     optMessage <- strOption (short 'm' <> metavar "message")
     pure (CommitOptions{..})
 
+fetchParser :: Parser (IO ())
+fetchParser =
+  gitFetch <$> do
+    pure (FetchOptions{..})
+
 main :: IO ()
 main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
  where
@@ -149,3 +155,4 @@ main = join $ customExecParser parserPrefs (info (parser <**> helper) fullDesc)
         <> command "read-tree" (info readTreeParser (progDesc "read tree information into directory index"))
         <> command "switch" (info switchParser (progDesc "switch branches"))
         <> command "commit" (info commitParser (progDesc "record changes to repository"))
+        <> command "fetch" (info fetchParser (progDesc "download objects and refs from another repository"))
