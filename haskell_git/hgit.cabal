@@ -73,6 +73,9 @@ executable hgit
     , optparse-applicative
     , pqueue
     , relude
+    , stm
+    , stm-conduit
+    , string-conversions
     , template-haskell
     , text
     , time

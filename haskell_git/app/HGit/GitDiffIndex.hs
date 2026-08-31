@@ -6,9 +6,8 @@ module HGit.GitDiffIndex (
 
 import Data.Map as Map
 import qualified Data.Vector as V
-import HGit.FindObject (findAndCoerceObj)
+import HGit.FindObject (findAndCoerceObj, findAndCoerceToTree)
 import HGit.Index (Index (..), IndexEntries, IndexEntry (..), TreeIndexDiff (..), getEntryHash, getStatData, isEntryModified, readIndex, treeIndexDiffFoldlM)
-import HGit.Object (Hash, ObjType (CommitObj, TreeObj), getFileHash, objPayload, readObj, strToHash)
 import HGit.Repository (Repository, WithRepository, WorkTreePath, runWithFoundRepo, worktreePath)
 import HGit.Tree (FlattenedTree, Tree, TreeItem (..), flattenTree, objToTree)
 import Relude
@@ -29,7 +28,7 @@ If Path exists in both (M):
 gitDiffIndex :: DiffIndexOptions -> IO ()
 gitDiffIndex DiffIndexOptions{..} = runWithFoundRepo $ do
   idxEntries <- idxEntries <$> readIndex
-  tree <- flattenTree . objToTree =<< findAndCoerceObj TreeObj optTree
+  tree <- flattenTree =<< findAndCoerceToTree optTree
   diffs <- diffTreeIndex tree idxEntries optCached
   mapM_ printDiff diffs
 

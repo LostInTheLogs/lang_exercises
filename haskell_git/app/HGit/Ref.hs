@@ -1,9 +1,8 @@
 module HGit.Ref where
 
 import qualified Data.List as List
-import HGit.Object (strToHash)
 import HGit.Repository (WithRepository, gitPath)
-import HGit.Types (Hash)
+import HGit.Types (Hash, asciiToHash)
 import HGit.Utils
 import Relude
 import System.FilePath ((</>))
@@ -20,7 +19,7 @@ readRef :: FilePath -> WithRepository Hash
 readRef path = do
   refOrHead <- fReadStrLine path
   case List.stripPrefix "ref: " refOrHead of
-    Nothing -> return $ strToHash refOrHead
+    Nothing -> return $ asciiToHash refOrHead
     Just ref -> asks gitPath [ref] >>= readRef
 
 findBranch :: FilePath -> WithRepository (Maybe Hash)

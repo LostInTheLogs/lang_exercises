@@ -16,13 +16,16 @@ dependencies:
   - filepath
   - filepattern
   - flatparse
-  - pqueue
   - http-conduit
   - http-types
   - mmap
   - mtl
   - optparse-applicative
+  - pqueue
   - relude
+  - stm
+  - stm-conduit
+  - string-conversions
   - template-haskell
   - text
   - time

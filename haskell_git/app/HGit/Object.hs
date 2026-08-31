@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module HGit.Object (
-  strToHash,
   getFileHash,
   hashLazy,
   makeObject,
@@ -40,12 +39,6 @@ import qualified System.FilePath as Path
 import qualified Text.Show
 import qualified UnliftIO.Directory as Dir
 import qualified UnliftIO.IO as IO
-
-strToHash :: String -> Hash
-strToHash hashText = do
-  case Base16.decode (encodeUtf8 hashText) of
-    Left err -> throwStrErr "strToHash" err
-    Right val -> Hash $ toShort val
 
 getFileHash :: (MonadIO m) => FilePath -> m Hash
 getFileHash path = liftIO $ do

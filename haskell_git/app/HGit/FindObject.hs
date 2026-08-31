@@ -11,7 +11,7 @@ import Control.Monad.Extra (firstJustM)
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.List as List
 import HGit.Commit (Commit (..), objToCommit)
-import HGit.Object (Hash (..), ObjType (..), Object (..), readObj, readObjOfType, strToHash)
+import HGit.Object (Hash (..), ObjType (..), Object (..), readObj, readObjOfType)
 import HGit.Ref
 import HGit.Repository (Repository, WithRepository, gitPath)
 import HGit.Tree (Tree, objToTree)

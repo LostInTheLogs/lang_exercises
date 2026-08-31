@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module HGit.GitLog (gitLog, LogOptions (..)) where
@@ -7,7 +6,6 @@ import qualified Data.Set as Set
 import qualified Data.Text as T
 import HGit.Commit (Commit (..), CommitQueue, cmtQueuePop, makeCmtQueue, oneLineShort, readCommit)
 import HGit.FindObject (findObject)
-import HGit.Object (Hash, ObjType (CommitObj), objPayload, readObj, strToHash)
 import HGit.Repository (Repository, WithRepository, runWithFoundRepo)
 import Relude
 

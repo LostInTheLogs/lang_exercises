@@ -5,6 +5,7 @@ module HGit.Types (
   Object (..),
   ObjType (..),
   PackIndex (..),
+  asciiToHash,
   zeroHash,
   zeroAsciiHash,
   hashLazy,
@@ -31,10 +32,16 @@ import System.FilePath ((</>))
 import qualified Text.Show
 
 import qualified Data.Attoparsec.Lazy as A
+import Data.String.Conversions (ConvertibleStrings)
+import Data.String.Conversions.Monomorphic (toStrictByteString)
 import qualified FlatParse.Basic as FP
 import HGit.Utils (Parser, binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
 
 newtype Hash = Hash {hashBS :: ShortByteString} deriving (Eq, Ord)
+
+instance Hashable Hash where
+  hashWithSalt salt Hash{..} =
+    salt `hashWithSalt` hashBS
 
 zeroHash :: Hash
 zeroHash = Hash $ toShort $ BS.replicate 20 0
@@ -54,6 +61,12 @@ asciiHashParser = do
   case Base16.decode hash of
     Left err -> fail err
     Right val -> return $ Hash $ toShort val
+
+asciiToHash :: (ConvertibleStrings a BS.ByteString) => a -> Hash
+asciiToHash hashText = do
+  case Base16.decode (toStrictByteString hashText) of
+    Left err -> throwStrErr "asciiToHash" err
+    Right val -> Hash $ toShort val
 
 byteHashFParser :: Parser Hash
 byteHashFParser = Hash . toShort <$> FP.take 20
