@@ -6,6 +6,7 @@ module HGit.Types (
   ObjType (..),
   PackIndex (..),
   asciiToHash,
+  hashToAscii,
   zeroHash,
   zeroAsciiHash,
   hashLazy,
@@ -33,7 +34,7 @@ import qualified Text.Show
 
 import qualified Data.Attoparsec.Lazy as A
 import Data.String.Conversions (ConvertibleStrings)
-import Data.String.Conversions.Monomorphic (toStrictByteString)
+import Data.String.Conversions.Monomorphic (fromStrictByteString, toStrictByteString)
 import qualified FlatParse.Basic as FP
 import HGit.Utils (Parser, binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
 
@@ -80,8 +81,11 @@ asciiHashFParser = do
 
 instance Show Hash where
   show :: Hash -> String
-  show hash | zeroHash == hash = zeroAsciiHash
-  show (Hash bs) = decodeUtf8 (Base16.encode (fromShort bs))
+  show = hashToAscii
+
+hashToAscii :: (IsString a, ConvertibleStrings ByteString a) => Hash -> a
+hashToAscii hash | zeroHash == hash = fromString zeroAsciiHash
+hashToAscii (Hash bs) = fromStrictByteString (Base16.encode (fromShort bs))
 
 hashLazy :: BSL.ByteString -> Hash
 hashLazy = Hash . toShort . SHA1.hashlazy

@@ -7,6 +7,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Lazy as BSL
 import Data.List.Extra (headDef)
+import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Heap as VS
@@ -98,3 +99,6 @@ distinctSorted (x : y : xs)
   | x == y = distinctSorted (y : xs)
   | otherwise = x : distinctSorted (y : xs)
 distinctSorted xs = xs
+
+dropSuffix :: Text -> Text -> Text
+dropSuffix suffix txt = fromMaybe txt (T.stripSuffix suffix txt)

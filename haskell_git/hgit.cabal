@@ -36,6 +36,7 @@ executable hgit
       HGit.Packfile
       HGit.Ref
       HGit.Repository
+      HGit.TransportUtils
       HGit.Tree
       HGit.Types
       HGit.UnpackTree
