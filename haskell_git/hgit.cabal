@@ -41,6 +41,7 @@ executable hgit
       HGit.Types
       HGit.UnpackTree
       HGit.Utils
+      HGit.ZLib
       Paths_hgit
   hs-source-dirs:
       app
@@ -75,9 +76,10 @@ executable hgit
     , pqueue
     , relude
     , stm
-    , stm-conduit
+    , streaming-commons
     , string-conversions
     , template-haskell
+    , temporary
     , text
     , time
     , transformers

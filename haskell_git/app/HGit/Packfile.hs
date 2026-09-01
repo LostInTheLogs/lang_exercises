@@ -1,6 +1,7 @@
 module HGit.Packfile (readPackObj) where
 
-import qualified Codec.Compression.Zlib as Zlib
+-- import qualified Codec.Compression.Zlib as Zlib
+
 import Control.Monad.Extra (firstJustM)
 import qualified Data.Attoparsec.Binary as AB
 import Data.Attoparsec.Lazy ((<?>))
@@ -21,6 +22,7 @@ import GHC.ByteOrder (ByteOrder (..), targetByteOrder)
 import HGit.Repository (PackCache (..), WithRepository, objectsPath, repoPackCache)
 import HGit.Types
 import HGit.Utils
+import qualified HGit.ZLib as HZlib
 import Relude
 import System.FilePath ((</>))
 import qualified System.FilePath as Path
@@ -86,7 +88,6 @@ getIndex idxPath = do
       writeIORef ref $ Map.insert idxPath (idx, packRaw) indexes
       return (idx, packRaw)
 
--- TODO: cache IORef (HashMap PackId PackHeader)
 findObjInPack :: Hash -> (Hash -> WithRepository Object) -> FilePath -> WithRepository (Maybe Object)
 findObjInPack objHash readObj idxPath = runMaybeT $ do
   (PackIndex{..}, contents) <- lift $ getIndex idxPath
@@ -119,24 +120,21 @@ readPackObjAtOffset :: BS.ByteString -> Int64 -> (Hash -> WithRepository Object)
 readPackObjAtOffset h offset readObj = do
   let contents = BS.drop (fromIntegral offset) h
 
+  -- TODO: flatparse, no lazy bytestring anywhere
   let ((poType, poSize), packObjData) = runParserUnsafe2 packObjHeaderParser (fromStrict contents)
 
   case poTypeToObjType poType of
     -- simple
     Just objType -> do
-      let uncompressed = Zlib.decompress packObjData
-      let obj = makeObject uncompressed objType
-
-      -- let sizeMismatch = poSize /= objSize obj
-      -- when sizeMismatch $ throwErr "packObjParser" "Size doesn't match"
-
+      let uncompressed = HZlib.decompressExact (toStrict packObjData) poSize
+      let obj = makeObject (toLazy uncompressed) objType
       return obj
     -- delta
     Nothing -> do
       let (lazyBaseObj, deltaRaw) = getBase poType packObjData
-      let decompressed = Zlib.decompress deltaRaw
-      -- when (BSL.length decompressed /= poSize) $ throwErr "readPackObjAtOffset" "Delta size doesn't match"
-      let delta = runFParserUnsafe deltaFParser (toStrict decompressed)
+      let decompressed = HZlib.decompressExact (toStrict deltaRaw) poSize
+
+      let delta = runFParserUnsafe deltaFParser decompressed
       base <- lazyBaseObj
 
       -- when (pdBaseSize delta /= objSize base) $ throwErr "readPackObjAtOffset" "Base obj size doesn't match"
@@ -309,7 +307,7 @@ offsetParser = do
     let x = fromIntegral $ a .&. 0b01111111
      in ((acc + 1) `Bits.shiftL` 7) .|. x
 
-packObjHeaderParser :: A.Parser (PackObjType, Int64)
+packObjHeaderParser :: A.Parser (PackObjType, Int)
 packObjHeaderParser = nameParser "packObjHeaderParser" $ do
   headerBS <- A.takeWhileIncluding (`Bits.testBit` 7)
   let header = BS.head headerBS

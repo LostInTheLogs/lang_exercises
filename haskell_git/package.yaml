@@ -24,9 +24,10 @@ dependencies:
   - pqueue
   - relude
   - stm
-  - stm-conduit
+  - streaming-commons
   - string-conversions
   - template-haskell
+  - temporary
   - text
   - time
   - transformers
