@@ -32,6 +32,7 @@ import HGit.Packfile
 import HGit.Repository (Repository, WithRepository, gitPath, objectsPath)
 import HGit.Types
 import HGit.Utils (binarySearch, fReadBSLine, fReadStrLine, nameParser, runParserUnsafe, runParserUnsafe2, throwErr, throwStrErr)
+import qualified HGit.ZLib as HZlib
 import Relude
 import qualified Relude.File as File
 import System.FilePath ((</>))
@@ -73,6 +74,7 @@ objectFileParser expectedHash objRaw = nameParser "objectFileParser" $ do
   objPayload <- A.takeLazyByteString
 
   let actualSize = BSL.length objPayload
+  -- TODO: don't
   when (objSize /= actualSize) $ fail "Object size mismatch"
   when (expectedHash /= hashLazy objRaw) $ fail "Object hash does not match"
 
@@ -116,7 +118,27 @@ readLooseObj objHash = runMaybeT $ do
   looseFileExists <- Dir.doesFileExist loosePath
   guard looseFileExists
 
-  objRaw <- readFileLBS loosePath
-  let decomp = Zlib.decompress objRaw
-  let parser = objectFileParser objHash decomp
-  pure $ runParserUnsafe parser decomp
+  objRaw <- readFileBS loosePath
+
+  let (decomp, _) = HZlib.decompressExactTwoPass objRaw lenReader
+  print decomp
+
+  let parser = objectFileParser objHash (toLazy decomp)
+
+  pure $ runParserUnsafe parser (toLazy decomp)
+
+-- [<type> <size>\0<data of size>]
+lenReader :: ByteString -> Int
+lenReader bs = case (BSC8.elemIndex ' ' bs, BS.elemIndex 0 bs) of
+  (Nothing, _) -> throwErr "lenReader" "incomplete prefix"
+  (_, Nothing) -> throwErr "lenReader" "incomplete prefix"
+  (Just iSpc, Just iNull) -> do
+    let prefix = BS.break (== 0) bs
+    let sizeAndRest = BS.drop 1 $ BSC8.dropWhile (/= ' ') bs
+    let sizeBs = BS.drop (iSpc + 1) $ BS.take iNull bs
+
+    unsafeReadUnsignedInt sizeBs + iNull + 1
+ where
+  unsafeReadUnsignedInt :: BS.ByteString -> Int
+  unsafeReadUnsignedInt = BS.foldl' (\acc w -> acc * 10 + fromIntegral (w - 48)) 0
+  {-# INLINE unsafeReadUnsignedInt #-}

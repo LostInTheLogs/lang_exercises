@@ -5,6 +5,7 @@ module HGit.Repository (
   worktreePath,
   worktreePath',
   objectsPath,
+  packPath,
   headsPath,
   runWithRepo,
   runWithFoundRepo,
@@ -65,6 +66,9 @@ worktreePath' path = do
 
 objectsPath :: [FilePath] -> WithRepository FilePath
 objectsPath path = gitPath ("objects" : path)
+
+packPath :: [FilePath] -> WithRepository FilePath
+packPath path = objectsPath ("pack" : path)
 
 headsPath :: FilePath -> WithRepository FilePath
 headsPath head' = gitPath ["refs", "heads", head']

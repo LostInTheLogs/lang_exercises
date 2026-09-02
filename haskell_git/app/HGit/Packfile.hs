@@ -1,7 +1,5 @@
 module HGit.Packfile (readPackObj) where
 
--- import qualified Codec.Compression.Zlib as Zlib
-
 import Control.Monad.Extra (firstJustM)
 import qualified Data.Attoparsec.Binary as AB
 import Data.Attoparsec.Lazy ((<?>))
@@ -126,13 +124,13 @@ readPackObjAtOffset h offset readObj = do
   case poTypeToObjType poType of
     -- simple
     Just objType -> do
-      let uncompressed = HZlib.decompressExact (toStrict packObjData) poSize
-      let obj = makeObject (toLazy uncompressed) objType
+      let decompressed = fst $ HZlib.decompressExact (toStrict packObjData) poSize
+      let obj = makeObject (toLazy decompressed) objType
       return obj
     -- delta
     Nothing -> do
       let (lazyBaseObj, deltaRaw) = getBase poType packObjData
-      let decompressed = HZlib.decompressExact (toStrict deltaRaw) poSize
+      let decompressed = fst $ HZlib.decompressExact (toStrict deltaRaw) poSize
 
       let delta = runFParserUnsafe deltaFParser decompressed
       base <- lazyBaseObj
