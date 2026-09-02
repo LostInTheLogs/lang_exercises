@@ -21,8 +21,10 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified FlatParse.Basic as FP
 import HGit.Commit (Commit (..), CommitQueue, cmtQueuePop, commitHash, makeCmtQueue, readCommit)
+import HGit.Object (readObj)
+import HGit.Packfile (indexPack)
 import HGit.Ref (collectRefs)
-import HGit.Repository (WithRepository, runWithFoundRepo)
+import HGit.Repository (WithRepository, packPath, runWithFoundRepo)
 import HGit.TransportUtils
 import HGit.Types (Hash (..), asciiHashFParser, asciiToHash, byteHashFParser, hashToAscii)
 import HGit.Utils
@@ -30,42 +32,12 @@ import qualified Network.HTTP.Simple as Http
 import qualified Network.HTTP.Types as HttpT
 import Relude
 import Relude.Extra (toFst)
+import System.FilePath
+import System.IO (openTempFileWithDefaultPermissions)
+import System.IO.MMap (Mode (ReadOnly), mmapFileByteString, mmapFilePtr, mmapWithFilePtr)
 import Text.Printf (printf)
-
--- import Control.Monad.IO.Class (liftIO)
--- import qualified Data.Conduit.Combinators as CC
--- import Data.Conduit.TQueue (TQueue, newTQueueIO, sinkTQueue, sourceTQueue, writeTQueue)
--- import UnliftIO.Async (Concurrently (..), runConcurrently)
-
--- -- Router Conduit: accepts Int, routes to either evenQ or oddQ
--- partitionRouter :: TQueue (Maybe Int) -> TQueue (Maybe Int) -> ConduitT Int Void IO ()
--- partitionRouter evenQ oddQ =
---   await >>= \case
---     Just x -> do
---       if even x
---         then liftIO $ atomically $ writeTQueue evenQ (Just x)
---         else liftIO $ atomically $ writeTQueue oddQ (Just x)
---       partitionRouter evenQ oddQ
---     Nothing -> liftIO $ atomically $ do
---       writeTQueue evenQ Nothing
---       writeTQueue oddQ Nothing
-
--- main :: IO ()
--- main = do
---   -- 1. Create STM Queues for the partitioned streams
---   evenQ <- newTQueueIO
---   oddQ <- newTQueueIO
-
---   let source = CC.yieldMany [1 .. 10]
-
---   -- 2. Run the feeder stream and the two downstream conduits concurrently
---   runConcurrently $
---     (,,)
---       <$> Concurrently (runConduit $ source .| partitionRouter evenQ oddQ)
---       <*> Concurrently (runConduit $ sourceTQueue evenQ .| CC.map (\x -> "Even: " ++ show x) .| CC.print)
---       <*> Concurrently (runConduit $ sourceTQueue oddQ .| CC.map (\x -> "Odd: " ++ show x) .| CC.print)
-
---   return ()
+import UnliftIO hiding (atomically)
+import UnliftIO.Directory (renameFile)
 
 -- https://git-scm.com/docs/http-protocol
 -- https://git-scm.com/docs/pack-protocol
@@ -73,6 +45,25 @@ import Text.Printf (printf)
 -- https://git-scm.com/docs/gitprotocol-pack
 
 data FetchOptions = FetchOptions {}
+
+closeQueue :: (MonadIO m) => TQueue (Maybe a) -> m ()
+closeQueue queue = atomically $ writeTQueue queue Nothing
+
+-- | Sink that writes items to a TQueue and automatically pushes 'Nothing' when done.
+sinkCloseableQueue :: (MonadIO m) => TQueue (Maybe a) -> ConduitT a Void m ()
+sinkCloseableQueue q = do
+  awaitForever $ \x -> liftIO $ atomically $ writeTQueue q (Just x)
+  liftIO $ atomically $ writeTQueue q Nothing
+
+-- | Source that reads from a TQueue until it receives 'Nothing'.
+sourceCloseableQueue :: (MonadIO m) => TQueue (Maybe a) -> ConduitT () a m ()
+sourceCloseableQueue q = loop
+ where
+  loop = do
+    mx <- liftIO $ atomically $ readTQueue q
+    case mx of
+      Just x -> yield x >> loop
+      Nothing -> pass
 
 infoRefsSmartS :: (Monad m) => ConduitT PktLineData Void m (Capabilities, [(Hash, ByteString)])
 infoRefsSmartS = do
@@ -95,17 +86,11 @@ infoRefsSmartS = do
     name <- FP.takeRest
     return (hash, name)
 
-refDiscovery :: (MonadUnliftIO m) => p -> m (Capabilities, [(Hash, ByteString)])
+refDiscovery :: (MonadUnliftIO m) => Text -> m (Capabilities, [(Hash, ByteString)])
 refDiscovery url = do
-  -- let refsUrl = "GET " <> url <> "/info/refs?service=git-upload-pack"
-  -- req <- liftIO $ Http.parseRequest $ toString refsUrl
-  -- response <- Http.httpBS req
-  -- let body = Http.getResponseBody response
-  -- writeFileBS "/home/vodfsh/Downloads/hgit_refdiscovery.bin" body
-
+  req <- hgitRequest $ "GET " <> url <> "/info/refs?service=git-upload-pack"
   runConduitRes $
-    C.sourceFile "/home/vodfsh/Downloads/hgit_refdiscovery.bin"
-      -- Http.httpSource req getSrc
+    Http.httpSource req getSrc
       .| pktLineDecoder
       .| infoRefsSmartS
 
@@ -113,13 +98,13 @@ data AckType = AckSimple | AckContinue | AckCommon | AckReady deriving (Show, Eq
 data Ack = Ack {ackHash :: Hash, ackType :: AckType} deriving (Show, Eq)
 
 -- returns either [Ack] or path to the tmp packfile file
-gitUploadPackS :: (MonadIO m) => Capabilities -> ConduitT ByteString Void m (Either [Ack] String)
-gitUploadPackS caps = do
-  print "everything:"
-  everything <- foldC
-  print $ BS.take 900 everything
-  leftover everything
-
+gitUploadPackS ::
+  (MonadIO m) =>
+  Capabilities ->
+  TQueue (Maybe ByteString) ->
+  TQueue (Maybe ByteString) ->
+  ConduitT ByteString Void m (Maybe [Ack])
+gitUploadPackS caps packQ sideQ = do
   (acks, nak, rest) <-
     pktLineDecoder .| do
       a <- takeWhileC ("ACK" `BS.isPrefixOf`) .| mapC parseAck .| sinkList
@@ -127,24 +112,23 @@ gitUploadPackS caps = do
       r <- sinkList
       return (a, n, r)
 
-  print "acks:"
-  mapM_ print acks
-
-  print "nak:"
-  print nak
-
-  print "rest:"
-  print rest
-
   packHeader <- takeCE 4 .| foldC
   case packHeader of
     "PACK" -> do
       leftover "PACK"
-      packfile <- foldC
-      return $ Right "packfile"
+
+      awaitForever $ \x -> liftIO $ atomically $ writeTQueue packQ (Just x)
+      closeQueue packQ
+      closeQueue sideQ
+      return Nothing
     "" -> do
-      return $ Left acks
-    _ -> throwErr "gitUploadPackS" "leftover data"
+      closeQueue packQ
+      closeQueue sideQ
+      return $ Just acks
+    _ -> do
+      closeQueue packQ
+      closeQueue sideQ
+      throwErr "gitUploadPackS" "leftover data"
  where
   parseAck bs = do
     let (hash, ackType) = BS.drop 1 <$> BS.splitAt 40 (BS.drop 4 bs)
@@ -155,10 +139,9 @@ gitUploadPackS caps = do
   parseAckType "" = AckSimple
   parseAckType _ = throwErr "parseAckType" "Unknown type"
 
-negotiate :: Capabilities -> Http.Request -> NonEmpty Hash -> CommitQueue -> [Hash] -> Int -> WithRepository String
-negotiate caps reqEmpty wants oldPending common sent = do
-  putBSLn $ "\n\n\tNEGOTATION ROUND " <> show sent
-  let n = 10 -- TODO: if sent > 32 then 64 else 32
+negotiate :: FilePath -> Handle -> Capabilities -> Http.Request -> NonEmpty Hash -> CommitQueue -> [Hash] -> Int -> WithRepository ()
+negotiate path h caps reqEmpty wants oldPending common sent = do
+  let n = if sent > 32 then 64 else 32
   (batch, pending) <- popN oldPending n
   let haves = fst <$> batch
 
@@ -169,18 +152,21 @@ negotiate caps reqEmpty wants oldPending common sent = do
   let ending = if givingUp then pktLineB "done" else pktLineB ""
 
   let reqBody = B.toLazyByteString $ wantsBody <> pktLineB "" <> havesBody <> ending
-  print reqBody
   let req = Http.setRequestBodyLBS reqBody reqEmpty
 
-  res <-
-    runConduitRes $
-      Http.httpSource req getSrc
-        -- .| foldC
-        .| gitUploadPackS caps
+  packfileQ <- newTQueueIO
+  sideQ <- newTQueueIO
 
-  print ""
-  print "res:"
-  print res
+  let source =
+        Http.httpSource req getSrc
+          .| gitUploadPackS caps packfileQ sideQ
+
+  (maybeAcks, (), ()) <-
+    runConcurrently $
+      (,,)
+        <$> Concurrently (runConduitRes source)
+        <*> Concurrently (runConduit $ sourceCloseableQueue packfileQ .| sinkHandle h)
+        <*> Concurrently (runConduit $ sourceCloseableQueue sideQ .| mapM_C (\x -> print $ "Thread side: " <> x))
 
   let commits = Map.fromList batch
   let getCachedParents hash = case Map.lookup hash commits of
@@ -190,9 +176,9 @@ negotiate caps reqEmpty wants oldPending common sent = do
         Just Commit{..} -> concatMap getCachedLeaves commitParents
         Nothing -> [hash]
 
-  case res of
-    Right file -> return file
-    Left acks -> do
+  case maybeAcks of
+    Nothing -> pass
+    Just acks -> do
       let ackHashes = ackHash <$> acks
       let ready = find (\(Ack _ ackType) -> ackType == AckReady) acks
 
@@ -206,7 +192,7 @@ negotiate caps reqEmpty wants oldPending common sent = do
                  in first (Q.filter (\i -> commitHash i `notElem` toRemove)) pending
             | otherwise = (Q.empty, Set.empty)
 
-      negotiate caps reqEmpty wants filteredPending (common ++ filteredAcks) (sent + n)
+      negotiate path h caps reqEmpty wants filteredPending (common ++ filteredAcks) (sent + n)
  where
   popN :: CommitQueue -> Int -> WithRepository ([(Hash, Commit)], CommitQueue)
   popN = go []
@@ -233,6 +219,12 @@ gitFetch FetchOptions{..} = runWithFoundRepo $ do
   -- pending <- makeCmtQueue <$> mapM readCommit [asciiToHash ("d774d7c035dad1ba94aec0e999f451cfb3582bb9" :: Text)] -- more rounds
   pending <- makeCmtQueue <$> mapM readCommit [asciiToHash ("44b08a3abb38383ce4313b4fb511d1387de8394b" :: Text)] -- one round
   -- pending <- makeCmtQueue <$> mapM readCommit (fst <$> uniqueRefs) -- HEAD
-  negotiate clientCaps uploadPackReqEmpty wants pending [] 0
+  packPth <- packPath []
 
-  pass
+  withTempFile packPth "fetch-packfile" $ \path h -> do
+    negotiate path h clientCaps uploadPackReqEmpty wants pending [] 0
+    hClose h
+
+    idxFile <- mmapWithBytestring path $ \raw -> indexPack raw readObj
+    let packFile = replaceExtension idxFile "pack"
+    renameFile path packFile

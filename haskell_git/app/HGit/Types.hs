@@ -144,6 +144,7 @@ makeObject objPayload objType =
 data PackIndex = PackIndex
   { idxFanout :: UV.Vector Word32
   , idxObjectHashes :: BS.ByteString
+  , idxCrc :: BS.ByteString
   , idxOffsets :: BS.ByteString
   , idxBigOffsets :: BS.ByteString
   , idxChecksum :: Hash

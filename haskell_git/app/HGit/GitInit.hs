@@ -2,7 +2,6 @@
 
 module HGit.GitInit (InitOptions (..), gitInit) where
 
-import Control.Exception (throwIO)
 import HGit.Repository (Repository (..), gitPath, makeRepo, runWithRepo)
 import HGit.Utils
 import Relude
@@ -10,6 +9,7 @@ import System.FilePath ((</>))
 import System.IO.Error (alreadyExistsErrorType, mkIOError)
 import UnliftIO.Directory (canonicalizePath)
 import qualified UnliftIO.Directory as Dir
+import UnliftIO.Exception (throwIO)
 
 data InitOptions = InitOptions {optPath :: FilePath}
 

@@ -1,24 +1,27 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 
-module HGit.ZLib (decompressExact, decompressExactTwoPass) where
+module HGit.ZLib (decompressExact, decompressExactTwoPass, CRC32, crc32, crc32Update) where
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Internal as BSI
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Lazy.Internal as BSLI
 import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 import Data.Streaming.Zlib
 import Data.Streaming.Zlib.Lowlevel
 import Foreign
-import Foreign.C (CChar)
-import Foreign.C.Types (CInt)
+import Foreign.C
 import GHC.ForeignPtr
 import HGit.Utils (throwErr)
 import Relude
 import System.IO.Unsafe (unsafePerformIO)
 import UnliftIO (bracket)
 
--- modified functions from
--- https://hackage-content.haskell.org/package/streaming-commons-0.2.3.1/docs/src/Data.Streaming.Zlib.html
+-- TODO: lazy bytestrings with unsafeInterleaveIO or a conduit
+-- input can be strict, because it's mmap'ed
 
 foreign import ccall "dynamic"
   mkFreeZStream :: FunPtr (ZStream' -> IO ()) -> (ZStream' -> IO ())
@@ -112,3 +115,68 @@ decompressExactTwoPass bs lenReader = unsafePerformIO $ withInflate $ \zstrPtr -
       leftover <- flip BS.takeEnd bs . fromIntegral <$> c_get_avail_in zstrPtr
 
       return (output, leftover)
+
+-- CRC code taken from <https://github.com/TeofilC/digest/blob/0fe4c403b9a90b60ed937af685dbc9a98e3af39a/Data/Digest/CRC32.hsc>
+-- with license
+{- Copyright (c) 2008-2009, Eugene Kirpichov
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE. -}
+
+-- | The class of values for which CRC32 may be computed
+class CRC32 a where
+  -- | Compute CRC32 checksum
+  crc32 :: a -> Word32
+  crc32 = crc32Update 0
+
+  -- | Given the CRC32 checksum of a string, compute CRC32 of its
+  -- concatenation with another string (t.i., incrementally update
+  -- the CRC32 hash value)
+  crc32Update :: Word32 -> a -> Word32
+
+instance CRC32 ByteString where
+  crc32Update = crc32_s_update
+
+instance CRC32 BSL.ByteString where
+  crc32Update = crc32_l_update
+
+instance CRC32 [Word8] where
+  crc32Update n = crc32Update n . BSL.pack
+
+crc32_s_update :: Word32 -> ByteString -> Word32
+crc32_s_update seed str
+  | BS.null str = seed
+  | otherwise =
+      unsafePerformIO $
+        unsafeUseAsCStringLen str $
+          \(buf, len) ->
+            fromIntegral <$> crc32_c (fromIntegral seed) (castPtr buf) (fromIntegral len)
+
+crc32_l_update :: Word32 -> BSL.ByteString -> Word32
+crc32_l_update = BSLI.foldlChunks crc32_s_update
+
+foreign import ccall unsafe "zlib.h crc32"
+  crc32_c ::
+    CULong ->
+    Ptr Word8 ->
+    CUInt ->
+    IO CULong

@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module HGit.Index (
@@ -376,13 +377,13 @@ treeIndexFoldlM treeItems indexEntries startAcc fun = work treeItems 0 startAcc
     let entry = indexEntries `V.unsafeIndex` idx
     case compare (fst item) (iePath entry) of
       LT -> do
-        newAcc <- fun acc $ OnlyInTree item
+        !newAcc <- fun acc $ OnlyInTree item
         work itemsTail idx newAcc
       EQ -> do
-        newAcc <- fun acc $ InBoth (snd item) entry
+        !newAcc <- fun acc $ InBoth (snd item) entry
         work itemsTail (idx + 1) newAcc
       GT -> do
-        newAcc <- fun acc $ OnlyInIndex entry
+        !newAcc <- fun acc $ OnlyInIndex entry
         work items (idx + 1) newAcc
 
 data TreeIndexDiff = DiffOnlyInTree (WorkTreePath, TreeItem) | DiffModified TreeItem IndexEntry | DiffSame TreeItem IndexEntry | DiffOnlyInIndex IndexEntry deriving (Show)

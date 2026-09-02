@@ -5,6 +5,7 @@ import Data.Attoparsec.Lazy ((<?>))
 import qualified Data.Attoparsec.Lazy as A
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC8
+import qualified Data.ByteString.Internal as BSI
 import qualified Data.ByteString.Lazy as BSL
 import Data.List.Extra (headDef)
 import qualified Data.Text as T
@@ -16,6 +17,9 @@ import qualified FlatParse.Basic as FP
 import Relude
 import qualified Relude.Unsafe as Unsafe
 import qualified System.IO as IO
+import System.IO.MMap
+import UnliftIO (MonadUnliftIO, finally)
+import UnliftIO.Foreign
 import qualified Prelude as P (error)
 
 putStrErrLn :: [Char] -> IO ()
@@ -102,3 +106,10 @@ distinctSorted xs = xs
 
 dropSuffix :: Text -> Text -> Text
 dropSuffix suffix txt = fromMaybe txt (T.stripSuffix suffix txt)
+
+mmapWithBytestring :: (MonadUnliftIO m) => FilePath -> (ByteString -> m b) -> m b
+mmapWithBytestring filepath action = do
+  (ptr, rawsize, offset, size) <- liftIO $ mmapFilePtr filepath ReadOnly Nothing
+  fptr <- newForeignPtr_ $ plusPtr ptr offset
+  let bs = BSI.fromForeignPtr0 fptr size
+  action bs `finally` liftIO (munmapFilePtr ptr rawsize)

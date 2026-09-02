@@ -1,6 +1,7 @@
-module HGit.Packfile (readPackObj) where
+module HGit.Packfile (readPackObj, indexPack) where
 
 import Control.Monad.Extra (firstJustM)
+import Crypto.Hash.SHA1 (hash, hashlazy)
 import qualified Data.Attoparsec.Binary as AB
 import Data.Attoparsec.Lazy ((<?>))
 import qualified Data.Attoparsec.Lazy as A
@@ -11,13 +12,15 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Unsafe as BSU
 import qualified Data.Map as Map
+import qualified Data.String.Conversions.Monomorphic as Conv
+import Data.Tuple.Extra (fst3)
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as UV
 import qualified FlatParse.Basic as FP
 import Foreign (peekElemOff)
 import Foreign.Ptr (castPtr)
 import GHC.ByteOrder (ByteOrder (..), targetByteOrder)
-import HGit.Repository (PackCache (..), WithRepository, objectsPath, repoPackCache)
+import HGit.Repository (PackCache (..), WithRepository, objectsPath, packPath, repoPackCache)
 import HGit.Types
 import HGit.Utils
 import qualified HGit.ZLib as HZlib
@@ -26,8 +29,15 @@ import System.FilePath ((</>))
 import qualified System.FilePath as Path
 import qualified System.IO.MMap as MMap
 import System.IO.Unsafe (unsafePerformIO)
+import UnliftIO (assert)
 import qualified UnliftIO as IO
 import qualified UnliftIO.Directory as Dir
+
+-- TODO: use fanout
+-- The header consists of 256 4-byte network byte order integers. N-th entry of
+-- this table records the number of objects in the corresponding pack, the first
+-- byte of whose object name is less than or equal to N. This is called the
+-- first-level fan-out table.
 
 getIndexFiles :: WithRepository [FilePath]
 getIndexFiles = do
@@ -37,7 +47,7 @@ getIndexFiles = do
   case packPaths of
     Just paths -> return paths
     Nothing -> do
-      packpath <- objectsPath ["pack"]
+      packpath <- packPath []
       packExists <- Dir.doesDirectoryExist packpath
       if packExists
         then do
@@ -100,22 +110,30 @@ findObjInPack objHash readObj idxPath = runMaybeT $ do
           then idxBigOffsets `indexWord64BE` fromIntegral (Bits.clearBit rawOffset 31)
           else fromIntegral rawOffset
 
-  lift $ readPackObjAtOffset contents (fromIntegral offset) readObj
+  lift $ fst <$> readPackObjAtOffset readObj contents (fromIntegral offset)
 
-{-
+{- | Returns the object and next offset
 n-byte type and length (3-bit type, (n-1)*7+4-bit length)
 Simple | Data
 
 Simple:
 compressed data
 
+  o
+xxxx---XX
+
 Delta:
 OBJ_REF_DELTA> base object name if
 OBJ_OFS_DELTA> a negative relative offset from the delta object's position in the pack
 compressed delta data
 -}
-readPackObjAtOffset :: BS.ByteString -> Int64 -> (Hash -> WithRepository Object) -> WithRepository Object
-readPackObjAtOffset h offset readObj = do
+readPackObjAtOffset ::
+  (Hash -> WithRepository Object) ->
+  BS.ByteString ->
+  Int64 ->
+  WithRepository (Object, Int64)
+readPackObjAtOffset readObj h offset = do
+  -- TODO: get rid if fromIntegrals fromStrist etc
   let contents = BS.drop (fromIntegral offset) h
 
   -- TODO: flatparse, no lazy bytestring anywhere
@@ -124,13 +142,14 @@ readPackObjAtOffset h offset readObj = do
   case poTypeToObjType poType of
     -- simple
     Just objType -> do
-      let decompressed = fst $ HZlib.decompressExact (toStrict packObjData) poSize
+      let (decompressed, rest) = HZlib.decompressExact (toStrict packObjData) poSize
       let obj = makeObject (toLazy decompressed) objType
-      return obj
+      let nextOffset = fromIntegral $ BS.length h - BS.length rest
+      return (obj, nextOffset)
     -- delta
     Nothing -> do
       let (lazyBaseObj, deltaRaw) = getBase poType packObjData
-      let decompressed = fst $ HZlib.decompressExact (toStrict deltaRaw) poSize
+      let (decompressed, rest) = HZlib.decompressExact (toStrict deltaRaw) poSize
 
       let delta = runFParserUnsafe deltaFParser decompressed
       base <- lazyBaseObj
@@ -142,12 +161,13 @@ readPackObjAtOffset h offset readObj = do
 
       -- when (pdObjSize delta /= objSize obj) $ throwErr "readPackObjAtOffset" "Result obj size doesn't match"
 
-      return obj
+      let nextOffset = fromIntegral $ BS.length h - BS.length rest
+      return (obj, nextOffset)
  where
   getBase :: PackObjType -> BSL.ByteString -> (WithRepository Object, BSL.ByteString)
   getBase POOfsDelta raw = do
     let (offsetDelta, rest) = runParserUnsafe2 offsetParser raw
-    let base = readPackObjAtOffset h (offset - offsetDelta) readObj
+    let base = fst <$> readPackObjAtOffset readObj h (offset - offsetDelta)
     (base, rest)
   getBase PORefDelta raw = do
     let (hash, rest) = first (Hash . toShort . toStrict) $ BSL.splitAt 20 raw
@@ -190,7 +210,7 @@ packIdxV2FParser = do
 
   idxObjectHashes <- FP.take (count * 20)
 
-  FP.skip (4 * count) -- crc
+  idxCrc <- FP.take (4 * count)
   idxOffsets <- FP.take (count * 4)
 
   remainingBytes <- FP.unPos <$> FP.getPos
@@ -319,3 +339,67 @@ packObjHeaderParser = nameParser "packObjHeaderParser" $ do
   foldHeader (acc, shift) a =
     let x = fromIntegral $ a .&. 0b01111111
      in (acc .|. (x `Bits.shiftL` shift), shift + 7)
+
+indexPack :: ByteString -> (Hash -> WithRepository Object) -> WithRepository FilePath
+indexPack bs readObj = do
+  let packHash = hashLazy $ toLazy $ BS.dropEnd 20 bs
+
+  let afterPACK = BS.drop 4 bs
+  let ver = indexWord32BE bs 1
+  when (ver /= 2) $ throwErr "indexPack" "unsupported pack version"
+  let count = fromIntegral $ indexWord32BE bs 2
+
+  x <- fst <$> runStateT (replicateM count $ StateT work) 12
+  let sorted = sortWith fst3 x
+  let (hashes, offsets, crc32s) = unzip3 sorted
+
+  let (smallOffsets, bigOffsets) = foldr sortOffset ([], []) offsets
+
+  let fanout = buildFanoutList $ fromShort . hashBS <$> hashes
+
+  let fanoutB = foldMap (B.int32BE . fromIntegral) fanout
+  let hashesB = foldMap (B.shortByteString . hashBS) hashes
+  let crcsB = foldMap (B.int32BE . fromIntegral) crc32s
+  let offsetsB = foldMap B.int32BE smallOffsets
+  let bigOffsetsB = foldMap B.int64BE bigOffsets
+
+  let idxData =
+        B.toLazyByteString $
+          B.word32BE idxV2Magic
+            <> B.word32BE 2
+            <> fanoutB
+            <> hashesB
+            <> crcsB
+            <> offsetsB
+            <> bigOffsetsB
+            <> B.shortByteString (hashBS packHash)
+  let idxRaw = idxData <> toLazy (hashlazy idxData)
+
+  let filename = "pack-" <> hashToAscii packHash <> ".idx"
+  path <- packPath [filename]
+  writeFileLBS path idxRaw
+
+  return path
+ where
+  work offset = do
+    (obj, nextOffset) <- readPackObjAtOffset readObj bs offset
+    let rawData = BS.drop (fromIntegral offset) $ BS.take (fromIntegral nextOffset) bs
+    let crc = HZlib.crc32 rawData
+    return ((objHash obj, offset, crc), nextOffset)
+
+  isSmallOffset n = n <= 0x7FFFFFFF
+
+  sortOffset :: Int64 -> ([Int32], [Int64]) -> ([Int32], [Int64])
+  sortOffset x (s, l) =
+    if isSmallOffset x
+      then (fromIntegral x : s, l)
+      else (Bits.setBit (fromIntegral $ length l) 31 : s, x : l)
+
+  buildFanoutList = go 0 0
+   where
+    go :: Word16 -> Word32 -> [BS.ByteString] -> [Word32]
+    go 256 _ _ = []
+    go targetByte acc hs =
+      let (matching, rest) = span (\h -> not (BS.null h) && BS.head h == fromIntegral targetByte) hs
+          newAcc = acc + fromIntegral (length matching)
+       in newAcc : go (targetByte + 1) newAcc rest

@@ -12,7 +12,7 @@ module HGit.Object (
   ObjType (..),
 ) where
 
-import qualified Codec.Compression.Zlib as Zlib
+import qualified Codec.Compression.Zlib as Zlib -- TODO: remove dependency
 import qualified Crypto.Hash.SHA1 as SHA1
 import qualified Data.Attoparsec.Binary as AB
 import qualified Data.Attoparsec.ByteString.Char8 as A8
@@ -100,7 +100,7 @@ readObj objHash = do
   found <- runMaybeT $ do
     let loose = readLooseObj objHash
     let pack = readPackObj objHash readObj
-    let readers = MaybeT <$> [pack, loose]
+    let readers = MaybeT <$> [loose, pack]
     asum readers
   let err = throwStrErr "readObj" $ "Object '" ++ show objHash ++ "' not found"
   maybe err return found
@@ -114,6 +114,10 @@ readObjOfType expectedType objHash = do
 readLooseObj :: Hash -> WithRepository (Maybe Object)
 readLooseObj objHash = runMaybeT $ do
   let (folderName, fileName) = splitAt 2 $ show objHash
+  -- TODO: cache the byte (2 ascii chars) of the name of the directory in a set
+  -- (fanout also uses the first byte)
+  -- use UnliftIO.Memoize
+
   loosePath <- lift $ objectsPath [folderName, fileName]
   looseFileExists <- Dir.doesFileExist loosePath
   guard looseFileExists
@@ -121,7 +125,6 @@ readLooseObj objHash = runMaybeT $ do
   objRaw <- readFileBS loosePath
 
   let (decomp, _) = HZlib.decompressExactTwoPass objRaw lenReader
-  print decomp
 
   let parser = objectFileParser objHash (toLazy decomp)
 

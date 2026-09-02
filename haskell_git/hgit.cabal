@@ -79,7 +79,6 @@ executable hgit
     , streaming-commons
     , string-conversions
     , template-haskell
-    , temporary
     , text
     , time
     , transformers

@@ -48,7 +48,6 @@ runWithFoundRepo action = getRepo >>= runReaderT (getWithRepository action)
 runWithRepo :: Repository -> WithRepository a -> IO a
 runWithRepo repo action = runReaderT (getWithRepository action) repo
 
--- | Compute path to a file inside .git folder (e.g., repoFile repo ["objects", "4b"])
 gitPath :: [FilePath] -> WithRepository FilePath
 gitPath path = do
   gitdir <- asks repoGitdir
