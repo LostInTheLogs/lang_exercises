@@ -18,7 +18,6 @@ import HGit.Tree (Tree (..), TreeItem (..), writeTree)
 import HGit.Types (zeroHash)
 import HGit.Utils
 import Relude
-import qualified Relude.Unsafe as Unsafe
 import qualified System.FilePath as Path
 import Text.Printf (printf)
 
@@ -87,8 +86,8 @@ gitCommit CommitOptions{..} = runWithFoundRepo $ do
 
   config <- readConfig
   let userSection = config Map.! ("user", "")
-  let user = Unsafe.last $ userSection Map.! "name"
-  let email = Unsafe.last $ userSection Map.! "email"
+  let user = last $ userSection Map.! "name"
+  let email = last $ userSection Map.! "email"
 
   (tSecs, tTz) <- getGitTimestamp
   let committer =

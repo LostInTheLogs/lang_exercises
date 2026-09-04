@@ -30,8 +30,28 @@ import qualified Network.HTTP.Types as HttpT
 import Relude
 import Relude.Extra (toFst)
 import Text.Printf (printf)
+import UnliftIO hiding (atomically)
 
 type PktLineData = ByteString
+
+closeQueue :: (MonadIO m) => TQueue (Maybe a) -> m ()
+closeQueue queue = atomically $ writeTQueue queue Nothing
+
+-- | Sink that writes items to a TQueue and automatically pushes 'Nothing' when done.
+sinkCloseableQueue :: (MonadIO m) => TQueue (Maybe a) -> ConduitT a Void m ()
+sinkCloseableQueue q = do
+  awaitForever $ \x -> liftIO $ atomically $ writeTQueue q (Just x)
+  liftIO $ atomically $ writeTQueue q Nothing
+
+-- | Source that reads from a TQueue until it receives 'Nothing'.
+sourceCloseableQueue :: (MonadIO m) => TQueue (Maybe a) -> ConduitT () a m ()
+sourceCloseableQueue q = loop
+ where
+  loop = do
+    mx <- liftIO $ atomically $ readTQueue q
+    case mx of
+      Just x -> yield x >> loop
+      Nothing -> pass
 
 normalizeGitUrl :: Text -> Text
 normalizeGitUrl urlRaw = do
@@ -147,8 +167,8 @@ toCapabilityStrings caps = filter (not . BS.null) $ capToStr <$> capSpecs
   capToStr (CapSpec{capName = capName, capGet = Right capGet}) =
     if not $ BS.null $ capGet caps then capName <> "=" <> capGet caps else ""
 
-makeClientCaps :: Capabilities -> Capabilities
-makeClientCaps serverCaps =
+makeClientCapabilities :: Capabilities -> Capabilities
+makeClientCapabilities serverCaps =
   emptyCapabilities
     { capAgent = "hgit"
     , capMultiAckDetailed = capMultiAckDetailed serverCaps

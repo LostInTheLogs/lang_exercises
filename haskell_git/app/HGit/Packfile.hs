@@ -1,4 +1,4 @@
-module HGit.Packfile (readPackObj, indexPack) where
+module HGit.Packfile (readPackObj, Pack (..), readPack, indexPack) where
 
 import Control.Monad.Extra (firstJustM)
 import Crypto.Hash.SHA1 (hash, hashlazy)
@@ -340,16 +340,24 @@ packObjHeaderParser = nameParser "packObjHeaderParser" $ do
     let x = fromIntegral $ a .&. 0b01111111
      in (acc .|. (x `Bits.shiftL` shift), shift + 7)
 
+data Pack = Pack {pckVer :: Word32, pckCount :: Word32} deriving (Show)
+
+readPack :: ByteString -> Pack
+readPack bs = do
+  let afterPACK = BS.drop 4 bs
+  let pckVer = indexWord32BE bs 1
+  if pckVer /= 2
+    then throwErr "readPack" "unsupported pack version"
+    else do
+      let pckCount = fromIntegral $ indexWord32BE bs 2
+      Pack{..}
+
 indexPack :: ByteString -> (Hash -> WithRepository Object) -> WithRepository FilePath
 indexPack bs readObj = do
   let packHash = hashLazy $ toLazy $ BS.dropEnd 20 bs
+  let Pack{..} = readPack bs
 
-  let afterPACK = BS.drop 4 bs
-  let ver = indexWord32BE bs 1
-  when (ver /= 2) $ throwErr "indexPack" "unsupported pack version"
-  let count = fromIntegral $ indexWord32BE bs 2
-
-  x <- fst <$> runStateT (replicateM count $ StateT work) 12
+  x <- fst <$> runStateT (replicateM (fromIntegral pckCount) $ StateT work) 12
   let sorted = sortWith fst3 x
   let (hashes, offsets, crc32s) = unzip3 sorted
 

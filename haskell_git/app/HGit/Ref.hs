@@ -8,6 +8,14 @@ import Relude
 import System.FilePath ((</>))
 import qualified UnliftIO.Directory as Dir
 
+-- TODO:
+-- .git/<refname> (exact path, e.g., HEAD, FETCH_HEAD, ORIG_HEAD)
+-- .git/refs/<refname>
+-- .git/refs/tags/<refname>
+-- .git/refs/heads/<refname>
+-- .git/refs/remotes/<refname>
+-- .git/refs/remotes/<refname>/HEAD
+
 resolveRef :: FilePath -> WithRepository FilePath
 resolveRef path = do
   refOrHead <- fReadStrLine path

@@ -1,20 +1,24 @@
 # Notes
 
+todo: comment all the functions with a -- |
 todo: comprehensive list of features and missing features or limitations
 
 ## Limitations
 
+- No reflog support
+- No tags support
 - No SHA-256 support
 - No symlinks support
 - No submodules support
 - Doesn't support blobs larger than ram
-- No gc, everything is written to the loose obj storage
+- No gc
 
 ## Supported features
 
 ### Commands
 
 - init
+- fetch (capabilities: multi_ack, multi_ack_detailed) (no shallow/filtered fetches, and no tags)
 - status
 - add
 - commit

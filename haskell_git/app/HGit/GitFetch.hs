@@ -11,7 +11,7 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as BSC8
 import qualified Data.ByteString.Unsafe as BSU
 import qualified Data.Conduit.Combinators as C
-import qualified Data.HashMap.Strict as Map
+import qualified Data.HashMap.Lazy as Map
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust)
@@ -21,10 +21,11 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified FlatParse.Basic as FP
 import HGit.Commit (Commit (..), CommitQueue, cmtQueuePop, commitHash, makeCmtQueue, readCommit)
+import HGit.Config (readConfig)
 import HGit.Object (readObj)
-import HGit.Packfile (indexPack)
+import HGit.Packfile (Pack (..), indexPack, readPack)
 import HGit.Ref (collectRefs)
-import HGit.Repository (WithRepository, packPath, runWithFoundRepo)
+import HGit.Repository (WithRepository, gitPath, packPath, runWithFoundRepo)
 import HGit.TransportUtils
 import HGit.Types (Hash (..), asciiHashFParser, asciiToHash, byteHashFParser, hashToAscii)
 import HGit.Utils
@@ -33,11 +34,13 @@ import qualified Network.HTTP.Types as HttpT
 import Relude
 import Relude.Extra (toFst)
 import System.FilePath
+import qualified System.FilePattern as Glob
 import System.IO (openTempFileWithDefaultPermissions)
 import System.IO.MMap (Mode (ReadOnly), mmapFileByteString, mmapFilePtr, mmapWithFilePtr)
 import Text.Printf (printf)
 import UnliftIO hiding (atomically)
 import UnliftIO.Directory (renameFile)
+import qualified UnliftIO.Directory as Dir
 
 -- https://git-scm.com/docs/http-protocol
 -- https://git-scm.com/docs/pack-protocol
@@ -45,25 +48,6 @@ import UnliftIO.Directory (renameFile)
 -- https://git-scm.com/docs/gitprotocol-pack
 
 data FetchOptions = FetchOptions {}
-
-closeQueue :: (MonadIO m) => TQueue (Maybe a) -> m ()
-closeQueue queue = atomically $ writeTQueue queue Nothing
-
--- | Sink that writes items to a TQueue and automatically pushes 'Nothing' when done.
-sinkCloseableQueue :: (MonadIO m) => TQueue (Maybe a) -> ConduitT a Void m ()
-sinkCloseableQueue q = do
-  awaitForever $ \x -> liftIO $ atomically $ writeTQueue q (Just x)
-  liftIO $ atomically $ writeTQueue q Nothing
-
--- | Source that reads from a TQueue until it receives 'Nothing'.
-sourceCloseableQueue :: (MonadIO m) => TQueue (Maybe a) -> ConduitT () a m ()
-sourceCloseableQueue q = loop
- where
-  loop = do
-    mx <- liftIO $ atomically $ readTQueue q
-    case mx of
-      Just x -> yield x >> loop
-      Nothing -> pass
 
 infoRefsSmartS :: (Monad m) => ConduitT PktLineData Void m (Capabilities, [(Hash, ByteString)])
 infoRefsSmartS = do
@@ -75,7 +59,8 @@ infoRefsSmartS = do
 
   restRefs <-
     takeWhileC (not . BS.null)
-      .| foldMapC (List.singleton . runFParserUnsafe refFP)
+      .| mapC (runFParserUnsafe refFP)
+      .| sinkList
 
   return (fromCapabilityStrings $ BSC8.split ' ' capabilities, firstRef : restRefs)
  where
@@ -88,24 +73,28 @@ infoRefsSmartS = do
 
 refDiscovery :: (MonadUnliftIO m) => Text -> m (Capabilities, [(Hash, ByteString)])
 refDiscovery url = do
-  req <- hgitRequest $ "GET " <> url <> "/info/refs?service=git-upload-pack"
-  runConduitRes $
-    Http.httpSource req getSrc
-      .| pktLineDecoder
-      .| infoRefsSmartS
+  -- req <- hgitRequest $ "GET " <> url <> "/info/refs?service=git-upload-pack"
+  -- response <- Http.httpBS req
+  -- let body = Http.getResponseBody response
+  -- writeFileBS "/home/vodfsh/Downloads/hgit_refdiscovery.bin" body -- TODO
+  trace "TODO use req" $
+    runConduitRes $
+      C.sourceFile "/home/vodfsh/Downloads/hgit_refdiscovery.bin"
+        -- Http.httpSource req getSrc
+        .| pktLineDecoder
+        .| infoRefsSmartS
 
 data AckType = AckSimple | AckContinue | AckCommon | AckReady deriving (Show, Eq)
 data Ack = Ack {ackHash :: Hash, ackType :: AckType} deriving (Show, Eq)
 
--- returns either [Ack] or path to the tmp packfile file
 gitUploadPackS ::
-  (MonadIO m) =>
+  (MonadResource m) =>
   Capabilities ->
   TQueue (Maybe ByteString) ->
   TQueue (Maybe ByteString) ->
   ConduitT ByteString Void m (Maybe [Ack])
-gitUploadPackS caps packQ sideQ = do
-  (acks, nak, rest) <-
+gitUploadPackS _caps packQ sideQ = bracketP pass (const cleanup) $ const $ do
+  (acks, _nak, _rest) <-
     pktLineDecoder .| do
       a <- takeWhileC ("ACK" `BS.isPrefixOf`) .| mapC parseAck .| sinkList
       n <- takeWhileC (== "NAK") .| headC
@@ -118,18 +107,15 @@ gitUploadPackS caps packQ sideQ = do
       leftover "PACK"
 
       awaitForever $ \x -> liftIO $ atomically $ writeTQueue packQ (Just x)
-      closeQueue packQ
-      closeQueue sideQ
       return Nothing
     "" -> do
-      closeQueue packQ
-      closeQueue sideQ
       return $ Just acks
     _ -> do
-      closeQueue packQ
-      closeQueue sideQ
       throwErr "gitUploadPackS" "leftover data"
  where
+  cleanup = do
+    closeQueue packQ
+    closeQueue sideQ
   parseAck bs = do
     let (hash, ackType) = BS.drop 1 <$> BS.splitAt 40 (BS.drop 4 bs)
     Ack (asciiToHash hash) (parseAckType ackType)
@@ -204,27 +190,80 @@ negotiate path h caps reqEmpty wants oldPending common sent = do
         (Nothing, _) -> return (reverse acc, queue)
         (Just cmt, nextQ) -> go ((commitHash cmt, cmt) : acc) nextQ (k - 1)
 
+matchUpdateRefs :: [Text] -> [(Hash, ByteString)] -> ([(Hash, ByteString)], [WithRepository ()])
+matchUpdateRefs specs refs = do
+  let matches = Glob.matchMany (parseSpec <$> specs) (parseRef <$> refs)
+
+  unzip $ workMatch <$> matches
+ where
+  parseRef (hash, ref) = ((hash, ref), decodeUtf8 ref)
+
+  -- spec -> ((overwrite,Hash), fromGlob)
+  parseSpec :: Text -> ((Bool, Text), String)
+  parseSpec spec = do
+    let (rest, to) = T.drop 1 <$> T.break (== ':') spec
+    let (overwrite, from) = case T.stripPrefix "+" rest of
+          Just x -> (True, x)
+          Nothing -> (False, rest)
+
+    ((overwrite, to), toString from)
+
+  workMatch ((overwrite, outglob), (hash, ref), match) = do
+    let outGitPath = case viaNonEmpty head match of
+          Just m -> T.replace "*" (toText m) outglob
+          Nothing -> outglob
+
+    let write = do
+          path <- gitPath [toString outGitPath]
+          Dir.createDirectoryIfMissing True $ takeDirectory path
+          exists <- Dir.doesFileExist path
+          unless (exists && not overwrite) $ do
+            writeFileBS path $ hashToAscii hash <> "\n"
+
+    ((hash, ref), write)
+
 gitFetch :: FetchOptions -> IO ()
-gitFetch FetchOptions{..} = runWithFoundRepo $ do
-  let url = normalizeGitUrl "https://github.com/LostInTheLogs/gleam_exercises" -- TODO:
-  uploadPackReqEmpty <- hgitRequest $ "POST " <> url <> "/git-upload-pack"
+gitFetch FetchOptions{} = runWithFoundRepo $ do
+  config <- readConfig
+  let remoteConfig = config Map.! ("remote", "origin")
+  let url = normalizeGitUrl $ last $ remoteConfig Map.! "url"
+  let fetchSpecs = remoteConfig Map.! "fetch"
 
-  (serverCaps, remoteRefs) <- refDiscovery url
-  let clientCaps = makeClientCaps serverCaps
+  (serverCaps, unfilteredRemoteRefs) <- refDiscovery url
 
-  -- TODO: check if we have the remote refs already
+  let (matchingRefs, updateRefsActions) = matchUpdateRefs (toList fetchSpecs) unfilteredRemoteRefs
 
-  let wants = NE.fromList $ map head $ NE.group $ sort $ fst <$> remoteRefs -- TODO: handle HEAD instead of distinct
+  -- TODO: after unpacking the packfile, WIPE CACHE, and write all new reachable tags to /refs/tags
+  -- TODO: second POST with annotated tags
+
+  let wants = NE.fromList $ map head $ NE.group $ sort $ fst <$> matchingRefs
   uniqueRefs <- map head . NE.group . sort <$> collectRefs
-  -- pending <- makeCmtQueue <$> mapM readCommit [asciiToHash ("d774d7c035dad1ba94aec0e999f451cfb3582bb9" :: Text)] -- more rounds
-  pending <- makeCmtQueue <$> mapM readCommit [asciiToHash ("44b08a3abb38383ce4313b4fb511d1387de8394b" :: Text)] -- one round
-  -- pending <- makeCmtQueue <$> mapM readCommit (fst <$> uniqueRefs) -- HEAD
+  pending <- makeCmtQueue <$> mapM readCommit (fst <$> uniqueRefs)
   packPth <- packPath []
 
   withTempFile packPth "fetch-packfile" $ \path h -> do
+    putTextLn "Fetching..."
+    let clientCaps = makeClientCapabilities serverCaps
+    uploadPackReqEmpty <- hgitRequest $ "POST " <> url <> "/git-upload-pack"
     negotiate path h clientCaps uploadPackReqEmpty wants pending [] 0
-    hClose h
 
-    idxFile <- mmapWithBytestring path $ \raw -> indexPack raw readObj
-    let packFile = replaceExtension idxFile "pack"
-    renameFile path packFile
+    hClose h
+    idxFile <- mmapWithBytestring path $ \raw -> do
+      let Pack{pckCount = count} = readPack raw
+      -- TODO: if less than 100 objects, unpack to loose
+      if count == 0
+        then do
+          putTextLn "Nothing to fetch."
+          return Nothing
+        else do
+          putTextLn "Indexing..."
+          Just <$> indexPack raw readObj
+
+    case idxFile of
+      Nothing -> pass
+      Just idxPath -> do
+        let packFile = replaceExtension idxPath "pack"
+        renameFile path packFile
+        print packFile
+
+  sequenceA_ updateRefsActions
