@@ -12,7 +12,7 @@ import HGit.Config (readConfig)
 import HGit.FindObject (findAndCoerceToTree, findObject)
 import HGit.Index (FileMode (Directory), Index (idxEntries), IndexEntry (..), readIndex)
 import HGit.Object (ObjType (CommitObj), Object (..), readObjOfType)
-import HGit.Ref (resolveRef)
+import HGit.Ref (canonicalizeSymRef)
 import HGit.Repository (WithRepository (WithRepository), WorkTreePath, gitPath, runWithFoundRepo)
 import HGit.Tree (Tree (..), TreeItem (..), writeTree)
 import HGit.Types (zeroHash)
@@ -110,7 +110,7 @@ gitCommit CommitOptions{..} = runWithFoundRepo $ do
         , commitAuthor = committer
         }
 
-  headFile <- resolveRef =<< gitPath ["HEAD"]
+  headFile <- canonicalizeSymRef =<< gitPath ["HEAD"]
   writeFile headFile $ show (commitHash commit)
 
   putTextLn $ oneLineLong commit

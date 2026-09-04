@@ -27,10 +27,9 @@ findHash hashText = do
 
 -- | get hash from e.g. HEAD
 findObject :: Text -> WithRepository Hash
-findObject "HEAD" = readRef =<< asks gitPath ["HEAD"]
 findObject obj = do
   let possibilities =
-        [ findBranch $ toString obj
+        [ resolveRef $ toString obj
         , findHash obj
         ]
   res <- firstJustM id possibilities

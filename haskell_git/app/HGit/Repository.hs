@@ -2,6 +2,7 @@
 
 module HGit.Repository (
   gitPath,
+  gitPath',
   worktreePath,
   worktreePath',
   objectsPath,
@@ -52,6 +53,11 @@ gitPath :: [FilePath] -> WithRepository FilePath
 gitPath path = do
   gitdir <- asks repoGitdir
   return $ foldl' (</>) gitdir path
+
+gitPath' :: FilePath -> WithRepository FilePath
+gitPath' path = do
+  gitdir <- asks repoGitdir
+  return $ gitdir </> path
 
 worktreePath :: [FilePath] -> WithRepository FilePath
 worktreePath path = do

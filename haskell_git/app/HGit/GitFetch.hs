@@ -135,9 +135,14 @@ negotiate path h caps reqEmpty wants oldPending common sent = do
   let havesBody = commandBuilder "have" $ hashToAscii <$> common ++ haves
 
   let givingUp = length haves < n || (sent > 256 && not (null common))
-  let ending = if givingUp then pktLineB "done" else pktLineB ""
 
-  let reqBody = B.toLazyByteString $ wantsBody <> pktLineB "" <> havesBody <> ending
+  let reqBody =
+        B.toLazyByteString $
+          wantsBody
+            <> pktLineB ""
+            <> havesBody
+            <> if givingUp then pktLineB "done" else pktLineB ""
+
   let req = Http.setRequestBodyLBS reqBody reqEmpty
 
   packfileQ <- newTQueueIO
@@ -190,6 +195,7 @@ negotiate path h caps reqEmpty wants oldPending common sent = do
         (Nothing, _) -> return (reverse acc, queue)
         (Just cmt, nextQ) -> go ((commitHash cmt, cmt) : acc) nextQ (k - 1)
 
+-- | Matches refs against refspecs, returns the matches refs and actions writing them to disk
 matchUpdateRefs :: [Text] -> [(Hash, ByteString)] -> ([(Hash, ByteString)], [WithRepository ()])
 matchUpdateRefs specs refs = do
   let matches = Glob.matchMany (parseSpec <$> specs) (parseRef <$> refs)
@@ -198,7 +204,6 @@ matchUpdateRefs specs refs = do
  where
   parseRef (hash, ref) = ((hash, ref), decodeUtf8 ref)
 
-  -- spec -> ((overwrite,Hash), fromGlob)
   parseSpec :: Text -> ((Bool, Text), String)
   parseSpec spec = do
     let (rest, to) = T.drop 1 <$> T.break (== ':') spec
@@ -235,6 +240,7 @@ gitFetch FetchOptions{} = runWithFoundRepo $ do
 
   -- TODO: after unpacking the packfile, WIPE CACHE, and write all new reachable tags to /refs/tags
   -- TODO: second POST with annotated tags
+  -- TODO: sideband
 
   let wants = NE.fromList $ map head $ NE.group $ sort $ fst <$> matchingRefs
   uniqueRefs <- map head . NE.group . sort <$> collectRefs

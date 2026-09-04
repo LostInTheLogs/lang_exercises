@@ -1,7 +1,8 @@
 module HGit.Ref where
 
+import Data.Foldable.Extra (findM)
 import qualified Data.List as List
-import HGit.Repository (WithRepository, gitPath)
+import HGit.Repository (WithRepository, gitPath, gitPath')
 import HGit.Types (Hash, asciiToHash)
 import HGit.Utils
 import Relude
@@ -9,39 +10,44 @@ import System.FilePath ((</>))
 import qualified UnliftIO.Directory as Dir
 
 -- TODO:
--- .git/<refname> (exact path, e.g., HEAD, FETCH_HEAD, ORIG_HEAD)
--- .git/refs/<refname>
--- .git/refs/tags/<refname>
--- .git/refs/heads/<refname>
--- .git/refs/remotes/<refname>
--- .git/refs/remotes/<refname>/HEAD
 
-resolveRef :: FilePath -> WithRepository FilePath
-resolveRef path = do
+canonicalizeSymRef :: FilePath -> WithRepository FilePath
+canonicalizeSymRef path = do
   refOrHead <- fReadStrLine path
   case List.stripPrefix "ref: " refOrHead of
     Nothing -> return path
-    Just ref -> asks gitPath [ref] >>= resolveRef
+    Just ref -> asks gitPath [ref] >>= canonicalizeSymRef
 
-readRef :: FilePath -> WithRepository Hash
-readRef path = do
+followRef :: FilePath -> WithRepository Hash
+followRef path = do
   refOrHead <- fReadStrLine path
   case List.stripPrefix "ref: " refOrHead of
     Nothing -> return $ asciiToHash refOrHead
-    Just ref -> asks gitPath [ref] >>= readRef
+    Just ref -> asks gitPath [ref] >>= followRef
 
-findBranch :: FilePath -> WithRepository (Maybe Hash)
-findBranch name = do
-  path <- asks gitPath ["refs", "heads", name]
-  fileExists <- Dir.doesFileExist path
-  if fileExists then Just <$> readRef path else return Nothing
+resolveRef :: FilePath -> WithRepository (Maybe Hash)
+resolveRef name = do
+  let relPaths =
+        [ name
+        , "refs" </> name
+        , "refs" </> "tags" </> name
+        , "refs" </> "heads" </> name
+        , "refs" </> "remotes" </> name
+        , "refs" </> "remotes" </> name </> "HEAD"
+        ]
+
+  paths <- mapM gitPath' relPaths
+  found <- findM Dir.doesFileExist paths
+  case found of
+    Nothing -> return Nothing
+    Just path -> Just <$> followRef path
 
 collectRefs :: WithRepository [(Hash, String)]
 collectRefs = do
   headsPath <- gitPath ["refs", "heads"]
   files <- Dir.listDirectory headsPath
   heads <- forM files $ \name -> do
-    hash <- readRef $ headsPath </> name
+    hash <- followRef $ headsPath </> name
     return (hash, toString $ "refs/heads/" <> name)
 
   pass -- TODO: tags and packed-refs

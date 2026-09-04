@@ -18,7 +18,7 @@ todo: comprehensive list of features and missing features or limitations
 ### Commands
 
 - init
-- fetch (capabilities: multi_ack, multi_ack_detailed) (no shallow/filtered fetches, and no tags)
+- fetch (smart git wire v1 via http, capabilities: multi_ack, multi_ack_detailed)
 - status
 - add
 - commit
@@ -32,4 +32,4 @@ todo: comprehensive list of features and missing features or limitations
 
 - loose objects: read, write
 - pack.pack (v2): read
-- pack.idx (v2): read, ~~write (for `git index-pack` and `git fetch`)~~
+- pack.idx (v2): read, write (for `git fetch`)

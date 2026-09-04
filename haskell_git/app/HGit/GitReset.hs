@@ -6,7 +6,7 @@ import HGit.FindObject (findAndCoerceToTree, findObject)
 import HGit.GitSwitch (setHeadToBranch)
 import HGit.Index (readIndex)
 import HGit.Object (ObjType (CommitObj), Object (..), readObj, readObjOfType)
-import HGit.Ref (resolveRef)
+import HGit.Ref (canonicalizeSymRef)
 import HGit.Repository (WithRepository, WorkTreePath, gitPath, runWithFoundRepo, worktreePath, worktreePath')
 import HGit.Tree (flattenTree)
 import HGit.UnpackTree (UnpackTreeOpts (..), unpackTree)
@@ -36,7 +36,7 @@ gitResetHard commit = do
   idx <- readIndex
 
   unpackTree UnpackTreeOpts{utoCheckConflicts = False} idx flattened
-  headFile <- resolveRef =<< gitPath ["HEAD"]
+  headFile <- canonicalizeSymRef =<< gitPath ["HEAD"]
   newHead <- show . objHash <$> (readObjOfType CommitObj =<< findObject commit)
 
   writeFileText headFile newHead
