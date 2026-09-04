@@ -9,8 +9,6 @@ import Relude
 import System.FilePath ((</>))
 import qualified UnliftIO.Directory as Dir
 
--- TODO:
-
 canonicalizeSymRef :: FilePath -> WithRepository FilePath
 canonicalizeSymRef path = do
   refOrHead <- fReadStrLine path

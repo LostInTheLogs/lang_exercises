@@ -6,7 +6,7 @@ todo: comprehensive list of features and missing features or limitations
 ## Limitations
 
 - No reflog support
-- No tags support
+- No tags and packed-refs support
 - No SHA-256 support
 - No symlinks support
 - No submodules support
